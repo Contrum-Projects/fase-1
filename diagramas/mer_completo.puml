@@ -1,0 +1,277 @@
+@startuml mer_completo
+hide circle
+skinparam linetype polyline
+skinparam nodesep 60
+skinparam ranksep 70
+skinparam shadowing false
+skinparam roundcorner 6
+skinparam entity {
+  BackgroundColor #FDFDFD
+  BorderColor #444444
+}
+skinparam defaultFontName Arial
+
+entity "ROL" as ROL {
+  * id_rol <<PK>>
+  --
+  * nombre
+  descripción
+}
+
+entity "PERMISO" as PERMISO {
+  * id_permiso <<PK>>
+  --
+  * código
+  descripción
+}
+
+entity "ROL_PERMISO" as ROL_PERMISO <<intersección>> {
+  * id_rol <<PK>>
+  * id_permiso <<PK>>
+  --
+}
+
+entity "USUARIO" as USUARIO {
+  * id_usuario <<PK>>
+  --
+  * nombre
+  * apellido
+  * email
+  * contraseña_hash
+  teléfono
+  * fecha_registro
+  fecha_verificación_correo
+  * fecha_aceptación_términos
+  * activo
+}
+
+entity "DIRECCIÓN" as DIRECCION {
+  * id_dirección <<PK>>
+  --
+  * calle
+  * número
+  * comuna
+  * región
+  referencia
+  * es_principal
+}
+
+entity "SOLICITUD_VERIFICACIÓN" as SOLICITUD {
+  * id_solicitud <<PK>>
+  --
+  * fecha_solicitud
+  fecha_resolución
+  * estado (pendiente | aprobada | rechazada)
+  motivo_rechazo
+}
+
+entity "ANTECEDENTE" as ANTECEDENTE {
+  * id_antecedente <<PK>>
+  --
+  * tipo
+  * nombre_archivo
+  * ubicación_archivo
+}
+
+entity "TOKEN_CORREO" as TOKEN_CORREO {
+  * id_token <<PK>>
+  --
+  * tipo (confirmación_correo | recuperación_contraseña)
+  * token_hash
+  * fecha_creación
+  * fecha_expiración
+  fecha_uso
+}
+
+entity "SESIÓN" as SESION {
+  * id_sesión <<PK>>
+  --
+  * token_refresco_hash
+  * fecha_creación
+  * fecha_expiración
+  fecha_revocación
+  dispositivo
+}
+
+entity "CATEGORÍA" as CATEGORIA {
+  * id_categoría <<PK>>
+  --
+  * nombre
+  descripción
+}
+
+entity "PRODUCTO" as PRODUCTO {
+  * id_producto <<PK>>
+  --
+  * sku
+  * nombre
+  * marca
+  * descripción
+  * origen_descripción (manual | IA | IA_editada)
+  * precio_minorista
+  * precio_mayorista
+  * stock
+  * activo
+  * fecha_creación
+}
+
+entity "IMAGEN_PRODUCTO" as IMAGEN {
+  * id_imagen <<PK>>
+  --
+  * ubicación_archivo
+  * orden
+  * es_principal
+}
+
+entity "CARRITO" as CARRITO {
+  * id_carrito <<PK>>
+  --
+  * fecha_creación
+  * fecha_actualización
+}
+
+entity "ITEM_CARRITO" as ITEM_CARRITO <<intersección>> {
+  * id_carrito <<PK>>
+  * id_producto <<PK>>
+  --
+  * cantidad
+  * fecha_agregado
+}
+
+entity "PEDIDO" as PEDIDO {
+  * id_pedido <<PK>>
+  --
+  * fecha_pedido
+  * estado_actual
+  * tipo_entrega (despacho | retiro_en_tienda)
+  * tipo_documento (boleta | factura)
+}
+
+entity "DATOS_FACTURACION" as DATOS_FACT {
+  * id_datos_facturación <<PK>>
+  --
+  * rut
+  * razón_social
+  * giro
+  * dirección
+  * comuna
+  * región
+  * correo_facturaciòn
+  * activo
+}
+
+entity "DOCUMENTO_TRIBUTARIO" as DOCUMENTO {
+  * id_documento <<PK>>
+  --
+  * tipo_documento (boleta | factura)
+  folio
+  fecha_emisión
+  * estado_documento (pendiente | aceptado | rechazado)
+  * monto_neto
+  * monto_iva
+  * monto_total
+  id_documento_externo
+  ubicación_archivo
+  rut_receptor
+  razón_social_receptor
+  giro_receptor
+  dirección_receptor
+  comuna_receptor
+}
+
+entity "DETALLE_PEDIDO" as DETALLE <<intersección>> {
+  * id_pedido <<PK>>
+  * id_producto <<PK>>
+  --
+  * cantidad
+  * precio_unitario_aplicado
+  * tipo_precio (minorista | mayorista)
+}
+
+entity "PAGO" as PAGO {
+  * id_pago <<PK>>
+  --
+  id_transacción_externa
+  * monto
+  * estado (pendiente | aprobado | rechazado)
+  fecha_pago
+  medio_pago
+}
+
+entity "ENVÍO" as ENVIO {
+  * id_envío <<PK>>
+  --
+  * servicio_envío
+  * tipo_tarifa (tiempo_real | fija_por_zona)
+  * costo
+  código_seguimiento
+  fecha_estimada
+  * estado_envío
+  * destinatario
+  teléfono_contacto
+  * calle
+  * número
+  * comuna
+  * región
+  referencia
+}
+
+entity "EVENTO_PAGO" as EVENTO_PAGO {
+  * id_evento <<PK>>
+  --
+  * id_evento_externo
+  * tipo_evento
+  * fecha_recepción
+  * estado_procesamiento (recibido | procesado | con_error)
+  fecha_procesamiento
+  contenido_recibido
+}
+
+entity "HISTORIAL_ESTADO_PEDIDO" as HIST <<débil | no tiene PK propia>> {
+  * id_pedido <<PK>>
+  * fecha_hora <<PK>>
+  --
+  * estado
+  comentario
+}
+
+entity "NOTIFICACIÓN" as NOTIF {
+  * id_notificación <<PK>>
+  --
+  * tipo
+  * asunto
+  * fecha_envío
+  * estado_envío
+}
+
+ROL ||--o{ USUARIO : "agrupa"
+ROL ||--o{ ROL_PERMISO : "tiene"
+PERMISO ||--o{ ROL_PERMISO : "se asigna en"
+USUARIO ||--o{ DIRECCION : "tiene"
+USUARIO ||--o{ SOLICITUD : "presenta"
+USUARIO |o--o{ SOLICITUD : "resuelve"
+SOLICITUD ||--|{ ANTECEDENTE : "incluye"
+USUARIO ||--o{ TOKEN_CORREO : "solicita"
+USUARIO ||--o{ SESION : "inicia"
+CATEGORIA |o--o{ CATEGORIA : "tiene subcategorías"
+CATEGORIA ||--o{ PRODUCTO : "clasifica"
+PRODUCTO ||--|{ IMAGEN : "tiene"
+USUARIO ||--o| CARRITO : "tiene"
+CARRITO ||--o{ ITEM_CARRITO : "contiene"
+PRODUCTO ||--o{ ITEM_CARRITO : "aparece en"
+USUARIO ||--o{ PEDIDO : "realiza"
+PEDIDO ||--|{ DETALLE : "tiene"
+PRODUCTO ||--o{ DETALLE : "aparece en"
+PEDIDO ||--o{ PAGO : "se paga con"
+PEDIDO ||--o| ENVIO : "se despacha con"
+PEDIDO ||--o{ DOCUMENTO : "genera"
+PAGO |o--o{ EVENTO_PAGO : "se notifica en"
+PEDIDO ||--|{ HIST : "registra"
+USUARIO |o--o{ HIST : "registra cambios"
+USUARIO ||--o{ NOTIF : "recibe"
+PEDIDO |o--o{ NOTIF : "origina"
+DATOS_FACT |o--o{ PEDIDO : "se usa en"
+USUARIO ||--o{ DATOS_FACT : "registra"
+
+
+@enduml

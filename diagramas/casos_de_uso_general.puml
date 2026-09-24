@@ -1,0 +1,109 @@
+@startuml casos_de_uso_general
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor #FDFDFD
+  BorderColor #444444
+}
+
+' ================= Actores primarios (izquierda) =================
+actor "Visitante" as V
+actor "Cliente\n(consumidor final B2C)" as C
+actor "Peluquero verificado\n(B2B)" as P
+actor "Personal de tienda" as S
+actor "Dueña\n(administradora)" as D
+
+' Generalizaciones: cada actor hereda lo del anterior
+P --|> C
+D --|> S
+
+' ================= Actores secundarios (derecha) =================
+actor "Mercado Pago" as MP <<sistema externo>>
+actor "Servicio de envíos" as ENV <<sistema externo>>
+actor "Servicio de correo" as MAIL <<sistema externo>>
+actor "Servicio de IA" as IA <<sistema externo>>
+
+rectangle "Plataforma e-commerce Cabello Perfecto" {
+
+  package "Acceso y cuenta" {
+    usecase "Registrarse" as UC01
+    usecase "Confirmar\ncorreo electrónico" as UC02
+    usecase "Iniciar sesión" as UC03
+    usecase "Cerrar sesión" as UC04
+    usecase "Cerrar sesión en\ntodos los dispositivos" as UC05
+    usecase "Recuperar contraseña" as UC06
+  }
+
+  package "Catálogo y compra" {
+    usecase "Explorar catálogo" as UC07
+    usecase "Gestionar carrito" as UC08
+    usecase "Realizar compra" as UC09
+    usecase "Elegir método\nde entrega" as UC10
+    usecase "Cotizar despacho\na domicilio" as UC11
+    usecase "Pagar pedido" as UC12
+    usecase "Consultar estado\nde pedido" as UC13
+  }
+
+  package "Verificación de peluqueros" {
+    usecase "Solicitar verificación\nde cuenta profesional" as UC15
+    usecase "Adjuntar antecedentes\nprofesionales" as UC16
+    usecase "Resolver solicitud\nde verificación" as UC17
+  }
+
+  package "Administración de la tienda" {
+    usecase "Gestionar productos" as UC18
+    usecase "Generar descripción\ncon IA" as UC19
+    usecase "Gestionar categorías" as UC20
+    usecase "Configurar precios\npor tipo de cliente" as UC21
+    usecase "Actualizar estado\nde pedido" as UC22
+    usecase "Gestionar roles\ny permisos" as UC23
+    usecase "Gestionar personal\nde tienda" as UC24
+  }
+}
+
+' ================= Actores primarios -> casos de uso =================
+V --> UC01
+V --> UC07
+
+C --> UC03
+C --> UC04
+C --> UC06
+C --> UC07
+C --> UC08
+C --> UC09
+C --> UC13
+
+S --> UC03
+S --> UC04
+S --> UC06
+S --> UC17
+S --> UC18
+S --> UC20
+S --> UC21
+S --> UC22
+
+D --> UC23
+D --> UC24
+
+' ================= Relaciones entre casos de uso =================
+UC01 ..> UC02 : <<include>>
+UC09 ..> UC10 : <<include>>
+UC09 ..> UC12 : <<include>>
+UC15 ..> UC16 : <<include>>
+UC05 .up.> UC04 : <<extend>>
+UC11 .up.> UC10 : <<extend>>
+UC19 .up.> UC18 : <<extend>>
+UC15 ..> UC01 : <<extend>>
+
+' ================= Actores secundarios =================
+UC12 --> MP
+UC11 --> ENV
+UC01 --> MAIL
+UC06 --> MAIL
+UC17 --> MAIL
+UC22 --> MAIL
+UC19 --> IA
+
+@enduml
