@@ -123,6 +123,16 @@ entity "IMAGEN_PRODUCTO" as IMAGEN {
   * es_principal
 }
 
+entity "LEAD" as LEAD {
+  * id_leak <<PK>>
+  --
+  * email
+  * fecha_suscripcion
+  * origen  (popup | footer | checkout)
+  * activo
+  fecha_baja
+}
+
 entity "CARRITO" as CARRITO {
   * id_carrito <<PK>>
   --
@@ -258,6 +268,7 @@ CATEGORIA ||--o{ PRODUCTO : "clasifica"
 PRODUCTO ||--|{ IMAGEN : "tiene"
 USUARIO ||--o| CARRITO : "tiene"
 CARRITO ||--o{ ITEM_CARRITO : "contiene"
+CARRITO |o--o{ NOTIF : "genera recordatorio"
 PRODUCTO ||--o{ ITEM_CARRITO : "aparece en"
 USUARIO ||--o{ PEDIDO : "realiza"
 PEDIDO ||--|{ DETALLE : "tiene"
