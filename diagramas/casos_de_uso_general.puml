@@ -8,7 +8,7 @@ skinparam usecase {
   BorderColor #444444
 }
 
-' ================= Actores primarios (izquierda) =================
+' Actores primarios
 actor "Visitante" as V
 actor "Cliente\n(consumidor final B2C)" as C
 actor "Peluquero verificado\n(B2B)" as P
@@ -19,7 +19,7 @@ actor "Dueña\n(administradora)" as D
 P --|> C
 D --|> S
 
-' ================= Actores secundarios (derecha) =================
+' Actores secundarios
 actor "Mercado Pago" as MP <<sistema externo>>
 actor "Servicio de envíos" as ENV <<sistema externo>>
 actor "Servicio de correo" as MAIL <<sistema externo>>
@@ -76,7 +76,7 @@ rectangle "Plataforma e-commerce Cabello Perfecto" {
   }
 }
 
-' ================= Actores primarios -> casos de uso =================
+'Actores primarios -> casos de uso
 V --> UC01
 V --> UC07
 V --> UC28
@@ -106,7 +106,7 @@ S --> UC22
 D --> UC23
 D --> UC24
 
-' ================= Relaciones entre casos de uso =================
+' Relaciones entre casos de uso
 UC01 ..> UC02 : <<include>>
 UC09 ..> UC10 : <<include>>
 UC09 ..> UC12 : <<include>>
@@ -117,7 +117,7 @@ UC11 .up.> UC10 : <<extend>>
 UC19 .up.> UC18 : <<extend>>
 UC27 .up.> UC13 : <<extend>>
 
-' ================= Actores secundarios =================
+' Actores secundarios 
 UC12 --> MP
 UC12 --> FACT
 UC11 --> ENV
