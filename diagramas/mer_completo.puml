@@ -5,6 +5,7 @@ skinparam nodesep 60
 skinparam ranksep 70
 skinparam shadowing false
 skinparam roundcorner 6
+scale max 4000 width
 skinparam entity {
   BackgroundColor #FDFDFD
   BorderColor #444444
