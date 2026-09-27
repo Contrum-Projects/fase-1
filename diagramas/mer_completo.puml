@@ -14,14 +14,14 @@ skinparam defaultFontName Arial
 entity "ROL" as ROL {
   * id_rol : INTEGER <<PK>>
   --
-  * nombre : VARCHAR(100)
+  * nombre : VARCHAR(100) <<UK>>
   descripción : VARCHAR(255)
 }
 
 entity "PERMISO" as PERMISO {
   * id_permiso : INTEGER <<PK>>
   --
-  * código : VARCHAR(50)
+  * código : VARCHAR(50) <<UK>>
   descripción : VARCHAR(255)
 }
 
@@ -34,11 +34,12 @@ entity "ROL_PERMISO" as ROL_PERMISO <<asociativa>> {
 entity "USUARIO" as USUARIO {
   * id_usuario : INTEGER <<PK>>
   --
+  * código_público : UUID <<UK>>
   * nombre : VARCHAR(100)
   * apellido : VARCHAR(100)
-  * email : VARCHAR(254)
+  * email : VARCHAR(254) <<UK>>
   * contraseña_hash : VARCHAR(255)
-  rut : VARCHAR(12)
+  rut : VARCHAR(12) <<UK>>
   fecha_nacimiento : DATE
   género : ENUM (femenino | masculino | otro | prefiere_no_decir)
   teléfono : VARCHAR(20)
@@ -62,7 +63,7 @@ entity "TOKEN_CORREO" as TOKEN_CORREO {
   * id_token : INTEGER <<PK>>
   --
   * tipo : ENUM (confirmación_correo | recuperación_contraseña)
-  * token_hash : VARCHAR(255)
+  * token_hash : VARCHAR(255) <<UK>>
   * fecha_creación : TIMESTAMPTZ
   * fecha_expiración : TIMESTAMPTZ
   fecha_uso : TIMESTAMPTZ
@@ -71,7 +72,7 @@ entity "TOKEN_CORREO" as TOKEN_CORREO {
 entity "SESIÓN" as SESION {
   * id_sesión : INTEGER <<PK>>
   --
-  * token_refresco_hash : VARCHAR(255)
+  * token_refresco_hash : VARCHAR(255) <<UK>>
   * fecha_creación : TIMESTAMPTZ
   * fecha_expiración : TIMESTAMPTZ
   fecha_revocación : TIMESTAMPTZ
@@ -91,7 +92,7 @@ entity "PERFIL_PROFESIONAL" as PERFIL_PRO {
 entity "ESPECIALIDAD" as ESPECIALIDAD {
   * id_especialidad : INTEGER <<PK>>
   --
-  * nombre : VARCHAR(100)
+  * nombre : VARCHAR(100) <<UK>>
   descripción : VARCHAR(255)
 }
 
@@ -121,7 +122,7 @@ entity "ANTECEDENTE" as ANTECEDENTE {
 entity "MARCA" as MARCA {
   * id_marca : INTEGER <<PK>>
   --
-  * nombre : VARCHAR(100)
+  * nombre : VARCHAR(100) <<UK>>
   * activa : BOOLEAN
 }
 
@@ -149,14 +150,14 @@ entity "PRODUCTO" as PRODUCTO {
 entity "FORMATO_PRODUCTO" as FORMATO {
   * id_formato : INTEGER <<PK>>
   --
-  * sku : VARCHAR(50)
-  código_barras : VARCHAR(14)
+  * sku : VARCHAR(50) <<UK>>
+  código_barras : VARCHAR(14) <<UK>>
   * nombre_formato : VARCHAR(100)
   contenido : DECIMAL(10,2)
   unidad_medida : ENUM (ml | g | unidad)
   precio_minorista_neto : DECIMAL(12,2)
   * precio_mayorista_neto : DECIMAL(12,2)
-  * umbral_stock : INTEGER
+  * stock_mínimo : INTEGER
   * peso_gramos : INTEGER
   * alto_cm : DECIMAL(7,2)
   * ancho_cm : DECIMAL(7,2)
@@ -206,10 +207,15 @@ entity "TASA_IVA" as TASA_IVA {
 entity "PEDIDO" as PEDIDO {
   * id_pedido : INTEGER <<PK>>
   --
+  * código_público : VARCHAR(12) <<UK>>
   * fecha_pedido : TIMESTAMPTZ
+  * fecha_expiración_pago : TIMESTAMPTZ
   * estado_actual : ENUM (pendiente_pago | pagado | en_preparación | despachado | entregado |\n    listo_para_retiro | retirado | cancelado)
   * tipo_entrega : ENUM (despacho | retiro_en_tienda)
   * tipo_documento_solicitado : ENUM (boleta | factura)
+  * monto_neto : INTEGER
+  * monto_iva : INTEGER
+  * monto_total : INTEGER
 }
 
 entity "DETALLE_PEDIDO" as DETALLE <<asociativa>> {
@@ -224,7 +230,7 @@ entity "DETALLE_PEDIDO" as DETALLE <<asociativa>> {
 entity "PAGO" as PAGO {
   * id_pago : INTEGER <<PK>>
   --
-  id_transacción_externa : VARCHAR(100)
+  id_transacción_externa : VARCHAR(100) <<UK>>
   * monto : INTEGER
   * estado : ENUM (pendiente | aprobado | rechazado)
   fecha_pago : TIMESTAMPTZ
@@ -234,7 +240,7 @@ entity "PAGO" as PAGO {
 entity "EVENTO_PAGO" as EVENTO_PAGO {
   * id_evento : INTEGER <<PK>>
   --
-  * id_evento_externo : VARCHAR(100)
+  * id_evento_externo : VARCHAR(100) <<UK>>
   * tipo_evento : VARCHAR(50)
   * fecha_recepción : TIMESTAMPTZ
   * estado_procesamiento : ENUM (recibido | procesado | con_error)
@@ -256,8 +262,8 @@ entity "DATOS_FACTURACIÓN" as DATOS_FACT {
 entity "DOCUMENTO_TRIBUTARIO" as DOCUMENTO {
   * id_documento : INTEGER <<PK>>
   --
-  * tipo : ENUM (boleta | factura | nota_crédito)
-  folio : INTEGER
+  * tipo : ENUM (boleta | factura | nota_crédito) <<UK1>>
+  folio : INTEGER <<UK1>>
   fecha_emisión : DATE
   * estado : ENUM (pendiente | aceptado | rechazado)
   * monto_neto : INTEGER
@@ -276,7 +282,7 @@ entity "ENVÍO" as ENVIO {
   * id_envío : INTEGER <<PK>>
   --
   * servicio_envío : VARCHAR(50)
-  * costo : INTEGER
+  * costo_neto : DECIMAL(12,2)
   código_seguimiento : VARCHAR(100)
   fecha_estimada : DATE
   * estado_envío : ENUM (pendiente | en_tránsito | entregado | con_incidencia)
@@ -289,8 +295,9 @@ entity "ENVÍO" as ENVIO {
 
 entity "HISTORIAL_ESTADO_PEDIDO" as HIST <<débil>> {
   * id_pedido : INTEGER <<PK>>
-  * fecha_hora : TIMESTAMPTZ <<PK>>
+  * correlativo : INTEGER <<PK>>
   --
+  * fecha_hora : TIMESTAMPTZ
   * estado : ENUM (pendiente_pago | pagado | en_preparación | despachado | entregado |\n    listo_para_retiro | retirado | cancelado)
   comentario : TEXT
 }
@@ -307,9 +314,9 @@ entity "NOTIFICACIÓN" as NOTIF {
 entity "LEAD" as LEAD {
   * id_lead : INTEGER <<PK>>
   --
-  * email : VARCHAR(254)
+  * email : VARCHAR(254) <<UK>>
   * fecha_suscripción : TIMESTAMPTZ
-  * origen : ENUM (popup | footer | checkout)
+  * origen : ENUM (popup | footer)
   * activo : BOOLEAN
   fecha_baja : TIMESTAMPTZ
 }
@@ -317,7 +324,7 @@ entity "LEAD" as LEAD {
 entity "PROVEEDOR" as PROVEEDOR {
   * id_proveedor : INTEGER <<PK>>
   --
-  * rut : VARCHAR(12)
+  * rut : VARCHAR(12) <<UK>>
   * razón_social : VARCHAR(150)
   nombre_contacto : VARCHAR(150)
   teléfono : VARCHAR(20)
@@ -385,21 +392,21 @@ entity "MOVIMIENTO_INVENTARIO" as MOVIMIENTO {
 entity "REGIÓN" as REGION {
   * id_región : INTEGER <<PK>>
   --
-  * código_cut : CHAR(2)
+  * código_cut : CHAR(2) <<UK>>
   * nombre : VARCHAR(100)
 }
 
 entity "PROVINCIA" as PROVINCIA {
   * id_provincia : INTEGER <<PK>>
   --
-  * código_cut : CHAR(3)
+  * código_cut : CHAR(3) <<UK>>
   * nombre : VARCHAR(100)
 }
 
 entity "COMUNA" as COMUNA {
   * id_comuna : INTEGER <<PK>>
   --
-  * código_cut : CHAR(5)
+  * código_cut : CHAR(5) <<UK>>
   * nombre : VARCHAR(100)
 }
 
@@ -438,7 +445,8 @@ DOCUMENTO |o--o{ DOCUMENTO : "es anulado por"
 PEDIDO ||--o| ENVIO : "se despacha con"
 PEDIDO ||--|{ HIST : "registra"
 USUARIO |o--o{ HIST : "registra cambios"
-USUARIO ||--o{ NOTIF : "recibe"
+USUARIO |o--o{ NOTIF : "recibe"
+LEAD |o--o{ NOTIF : "recibe oferta"
 PEDIDO |o--o{ NOTIF : "origina"
 CARRITO |o--o{ NOTIF : "genera recordatorio"
 PROVEEDOR ||--o{ ENTRADA : "abastece"
