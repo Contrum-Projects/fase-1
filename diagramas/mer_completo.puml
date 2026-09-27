@@ -12,277 +12,453 @@ skinparam entity {
 skinparam defaultFontName Arial
 
 entity "ROL" as ROL {
-  * id_rol <<PK>>
+  * id_rol : INTEGER <<PK>>
   --
-  * nombre
-  descripción
+  * nombre : VARCHAR(100)
+  descripción : VARCHAR(255)
 }
 
 entity "PERMISO" as PERMISO {
-  * id_permiso <<PK>>
+  * id_permiso : INTEGER <<PK>>
   --
-  * código
-  descripción
+  * código : VARCHAR(50)
+  descripción : VARCHAR(255)
 }
 
-entity "ROL_PERMISO" as ROL_PERMISO <<intersección>> {
-  * id_rol <<PK>>
-  * id_permiso <<PK>>
+entity "ROL_PERMISO" as ROL_PERMISO <<asociativa>> {
+  * id_rol : INTEGER <<PK>>
+  * id_permiso : INTEGER <<PK>>
   --
 }
 
 entity "USUARIO" as USUARIO {
-  * id_usuario <<PK>>
+  * id_usuario : INTEGER <<PK>>
   --
-  * nombre
-  * apellido
-  * email
-  * contraseña_hash
-  teléfono
-  * fecha_registro
-  fecha_verificación_correo
-  * fecha_aceptación_términos
-  * activo
+  * nombre : VARCHAR(100)
+  * apellido : VARCHAR(100)
+  * email : VARCHAR(254)
+  * contraseña_hash : VARCHAR(255)
+  rut : VARCHAR(12)
+  fecha_nacimiento : DATE
+  género : ENUM (femenino | masculino | otro | prefiere_no_decir)
+  teléfono : VARCHAR(20)
+  * fecha_registro : TIMESTAMPTZ
+  fecha_verificación_correo : TIMESTAMPTZ
+  * acepta_marketing_email : BOOLEAN
+  fecha_consentimiento_marketing : TIMESTAMPTZ
+  * activo : BOOLEAN
 }
 
 entity "DIRECCIÓN" as DIRECCION {
-  * id_dirección <<PK>>
+  * id_dirección : INTEGER <<PK>>
   --
-  * calle
-  * número
-  * comuna
-  * región
-  referencia
-  * es_principal
-}
-
-entity "SOLICITUD_VERIFICACIÓN" as SOLICITUD {
-  * id_solicitud <<PK>>
-  --
-  * fecha_solicitud
-  fecha_resolución
-  * estado (pendiente | aprobada | rechazada)
-  motivo_rechazo
-}
-
-entity "ANTECEDENTE" as ANTECEDENTE {
-  * id_antecedente <<PK>>
-  --
-  * tipo
-  * nombre_archivo
-  * ubicación_archivo
+  * calle : VARCHAR(150)
+  * número : VARCHAR(20)
+  referencia : VARCHAR(255)
+  * es_principal : BOOLEAN
 }
 
 entity "TOKEN_CORREO" as TOKEN_CORREO {
-  * id_token <<PK>>
+  * id_token : INTEGER <<PK>>
   --
-  * tipo (confirmación_correo | recuperación_contraseña)
-  * token_hash
-  * fecha_creación
-  * fecha_expiración
-  fecha_uso
+  * tipo : ENUM (confirmación_correo | recuperación_contraseña)
+  * token_hash : VARCHAR(255)
+  * fecha_creación : TIMESTAMPTZ
+  * fecha_expiración : TIMESTAMPTZ
+  fecha_uso : TIMESTAMPTZ
 }
 
 entity "SESIÓN" as SESION {
-  * id_sesión <<PK>>
+  * id_sesión : INTEGER <<PK>>
   --
-  * token_refresco_hash
-  * fecha_creación
-  * fecha_expiración
-  fecha_revocación
-  dispositivo
+  * token_refresco_hash : VARCHAR(255)
+  * fecha_creación : TIMESTAMPTZ
+  * fecha_expiración : TIMESTAMPTZ
+  fecha_revocación : TIMESTAMPTZ
+  dispositivo : VARCHAR(255)
+}
+
+entity "PERFIL_PROFESIONAL" as PERFIL_PRO {
+  * id_perfil : INTEGER <<PK>>
+  --
+  * años_experiencia : INTEGER
+  * modalidad : ENUM (independiente | dependiente | dueño_salón | a_domicilio)
+  nombre_lugar_trabajo : VARCHAR(150)
+  red_social : VARCHAR(255)
+  * fecha_actualización : TIMESTAMPTZ
+}
+
+entity "ESPECIALIDAD" as ESPECIALIDAD {
+  * id_especialidad : INTEGER <<PK>>
+  --
+  * nombre : VARCHAR(100)
+  descripción : VARCHAR(255)
+}
+
+entity "PERFIL_ESPECIALIDAD" as PERFIL_ESP <<asociativa>> {
+  * id_perfil : INTEGER <<PK>>
+  * id_especialidad : INTEGER <<PK>>
+  --
+}
+
+entity "SOLICITUD_VERIFICACIÓN" as SOLICITUD {
+  * id_solicitud : INTEGER <<PK>>
+  --
+  * fecha_solicitud : TIMESTAMPTZ
+  fecha_resolución : TIMESTAMPTZ
+  * estado : ENUM (pendiente | aprobada | rechazada)
+  motivo_rechazo : TEXT
+}
+
+entity "ANTECEDENTE" as ANTECEDENTE {
+  * id_antecedente : INTEGER <<PK>>
+  --
+  * tipo : ENUM (certificado_estudios | certificado_laboral | inicio_actividades_sii | otro)
+  * nombre_archivo : VARCHAR(255)
+  * ubicación_archivo : VARCHAR(500)
+}
+
+entity "MARCA" as MARCA {
+  * id_marca : INTEGER <<PK>>
+  --
+  * nombre : VARCHAR(100)
+  * activa : BOOLEAN
 }
 
 entity "CATEGORÍA" as CATEGORIA {
-  * id_categoría <<PK>>
+  * id_categoría : INTEGER <<PK>>
   --
-  * nombre
-  descripción
+  * nombre : VARCHAR(100)
+  descripción : VARCHAR(255)
 }
 
 entity "PRODUCTO" as PRODUCTO {
-  * id_producto <<PK>>
+  * id_producto : INTEGER <<PK>>
   --
-  * sku
-  * nombre
-  * marca
-  * descripción
-  * origen_descripción (manual | IA | IA_editada)
-  * precio_minorista
-  * precio_mayorista
-  * stock
-  * activo
-  * fecha_creación
+  * nombre : VARCHAR(200)
+  * descripción : TEXT
+  * origen_descripción : ENUM (manual | IA | IA_editada)
+  * tipo : ENUM (simple | pack)
+  * canal_venta : ENUM (general | solo_profesional)
+  * controla_vencimiento : BOOLEAN
+  días_alerta_vencimiento : INTEGER
+  * activo : BOOLEAN
+  * fecha_creación : TIMESTAMPTZ
+}
+
+entity "FORMATO_PRODUCTO" as FORMATO {
+  * id_formato : INTEGER <<PK>>
+  --
+  * sku : VARCHAR(50)
+  código_barras : VARCHAR(14)
+  * nombre_formato : VARCHAR(100)
+  contenido : DECIMAL(10,2)
+  unidad_medida : ENUM (ml | g | unidad)
+  precio_minorista_neto : DECIMAL(12,2)
+  * precio_mayorista_neto : DECIMAL(12,2)
+  * umbral_stock : INTEGER
+  * peso_gramos : INTEGER
+  * alto_cm : DECIMAL(7,2)
+  * ancho_cm : DECIMAL(7,2)
+  * largo_cm : DECIMAL(7,2)
+  * activo : BOOLEAN
+}
+
+entity "COMPONENTE_PACK" as COMP_PACK <<asociativa>> {
+  * id_formato_pack : INTEGER <<PK>>
+  * id_formato_componente : INTEGER <<PK>>
+  --
+  * cantidad : INTEGER
 }
 
 entity "IMAGEN_PRODUCTO" as IMAGEN {
-  * id_imagen <<PK>>
+  * id_imagen : INTEGER <<PK>>
   --
-  * ubicación_archivo
-  * orden
-  * es_principal
-}
-
-entity "LEAD" as LEAD {
-  * id_leak <<PK>>
-  --
-  * email
-  * fecha_suscripcion
-  * origen  (popup | footer | checkout)
-  * activo
-  fecha_baja
+  * ubicación_archivo : VARCHAR(500)
+  * orden : INTEGER
+  * es_principal : BOOLEAN
 }
 
 entity "CARRITO" as CARRITO {
-  * id_carrito <<PK>>
+  * id_carrito : INTEGER <<PK>>
   --
-  * fecha_creación
-  * fecha_actualización
+  * fecha_creación : TIMESTAMPTZ
+  * fecha_actualización : TIMESTAMPTZ
 }
 
-entity "ITEM_CARRITO" as ITEM_CARRITO <<intersección>> {
-  * id_carrito <<PK>>
-  * id_producto <<PK>>
+entity "ITEM_CARRITO" as ITEM_CARRITO <<asociativa>> {
+  * id_carrito : INTEGER <<PK>>
+  * id_formato : INTEGER <<PK>>
   --
-  * cantidad
-  * fecha_agregado
+  * cantidad : INTEGER
+  * fecha_agregado : TIMESTAMPTZ
+}
+
+entity "TASA_IVA" as TASA_IVA {
+  * id_tasa : INTEGER <<PK>>
+  --
+  * porcentaje : DECIMAL(5,2)
+  * fecha_inicio_vigencia : DATE
+  fecha_fin_vigencia : DATE
+  referencia_legal : VARCHAR(255)
 }
 
 entity "PEDIDO" as PEDIDO {
-  * id_pedido <<PK>>
+  * id_pedido : INTEGER <<PK>>
   --
-  * fecha_pedido
-  * estado_actual
-  * tipo_entrega (despacho | retiro_en_tienda)
-  * tipo_documento (boleta | factura)
+  * fecha_pedido : TIMESTAMPTZ
+  * estado_actual : ENUM (pendiente_pago | pagado | en_preparación | despachado | entregado |\n    listo_para_retiro | retirado | cancelado)
+  * tipo_entrega : ENUM (despacho | retiro_en_tienda)
+  * tipo_documento_solicitado : ENUM (boleta | factura)
 }
 
-entity "DATOS_FACTURACION" as DATOS_FACT {
-  * id_datos_facturación <<PK>>
+entity "DETALLE_PEDIDO" as DETALLE <<asociativa>> {
+  * id_pedido : INTEGER <<PK>>
+  * id_formato : INTEGER <<PK>>
   --
-  * rut
-  * razón_social
-  * giro
-  * dirección
-  * comuna
-  * región
-  * correo_facturaciòn
-  * activo
-}
-
-entity "DOCUMENTO_TRIBUTARIO" as DOCUMENTO {
-  * id_documento <<PK>>
-  --
-  * tipo_documento (boleta | factura)
-  folio
-  fecha_emisión
-  * estado_documento (pendiente | aceptado | rechazado)
-  * monto_neto
-  * monto_iva
-  * monto_total
-  id_documento_externo
-  ubicación_archivo
-  rut_receptor
-  razón_social_receptor
-  giro_receptor
-  dirección_receptor
-  comuna_receptor
-}
-
-entity "DETALLE_PEDIDO" as DETALLE <<intersección>> {
-  * id_pedido <<PK>>
-  * id_producto <<PK>>
-  --
-  * cantidad
-  * precio_unitario_aplicado
-  * tipo_precio (minorista | mayorista)
+  * cantidad : INTEGER
+  * precio_unitario_neto_aplicado : DECIMAL(12,2)
+  * tipo_precio : ENUM (minorista | mayorista)
 }
 
 entity "PAGO" as PAGO {
-  * id_pago <<PK>>
+  * id_pago : INTEGER <<PK>>
   --
-  id_transacción_externa
-  * monto
-  * estado (pendiente | aprobado | rechazado)
-  fecha_pago
-  medio_pago
-}
-
-entity "ENVÍO" as ENVIO {
-  * id_envío <<PK>>
-  --
-  * servicio_envío
-  * tipo_tarifa (tiempo_real | fija_por_zona)
-  * costo
-  código_seguimiento
-  fecha_estimada
-  * estado_envío
-  * destinatario
-  teléfono_contacto
-  * calle
-  * número
-  * comuna
-  * región
-  referencia
+  id_transacción_externa : VARCHAR(100)
+  * monto : INTEGER
+  * estado : ENUM (pendiente | aprobado | rechazado)
+  fecha_pago : TIMESTAMPTZ
+  medio_pago : VARCHAR(50)
 }
 
 entity "EVENTO_PAGO" as EVENTO_PAGO {
-  * id_evento <<PK>>
+  * id_evento : INTEGER <<PK>>
   --
-  * id_evento_externo
-  * tipo_evento
-  * fecha_recepción
-  * estado_procesamiento (recibido | procesado | con_error)
-  fecha_procesamiento
-  contenido_recibido
+  * id_evento_externo : VARCHAR(100)
+  * tipo_evento : VARCHAR(50)
+  * fecha_recepción : TIMESTAMPTZ
+  * estado_procesamiento : ENUM (recibido | procesado | con_error)
+  fecha_procesamiento : TIMESTAMPTZ
+  contenido_recibido : JSONB
 }
 
-entity "HISTORIAL_ESTADO_PEDIDO" as HIST <<débil | no tiene PK propia>> {
-  * id_pedido <<PK>>
-  * fecha_hora <<PK>>
+entity "DATOS_FACTURACIÓN" as DATOS_FACT {
+  * id_datos_facturación : INTEGER <<PK>>
   --
-  * estado
-  comentario
+  * rut : VARCHAR(12)
+  * razón_social : VARCHAR(150)
+  * giro : VARCHAR(150)
+  * dirección : VARCHAR(200)
+  correo_facturación : VARCHAR(254)
+  * activo : BOOLEAN
+}
+
+entity "DOCUMENTO_TRIBUTARIO" as DOCUMENTO {
+  * id_documento : INTEGER <<PK>>
+  --
+  * tipo : ENUM (boleta | factura | nota_crédito)
+  folio : INTEGER
+  fecha_emisión : DATE
+  * estado : ENUM (pendiente | aceptado | rechazado)
+  * monto_neto : INTEGER
+  * monto_iva : INTEGER
+  * monto_total : INTEGER
+  id_documento_externo : VARCHAR(100)
+  ubicación_archivo : VARCHAR(500)
+  rut_receptor : VARCHAR(12)
+  razón_social_receptor : VARCHAR(150)
+  giro_receptor : VARCHAR(150)
+  dirección_receptor : VARCHAR(200)
+  comuna_receptor : VARCHAR(100)
+}
+
+entity "ENVÍO" as ENVIO {
+  * id_envío : INTEGER <<PK>>
+  --
+  * servicio_envío : VARCHAR(50)
+  * costo : INTEGER
+  código_seguimiento : VARCHAR(100)
+  fecha_estimada : DATE
+  * estado_envío : ENUM (pendiente | en_tránsito | entregado | con_incidencia)
+  * destinatario : VARCHAR(150)
+  teléfono_contacto : VARCHAR(20)
+  * calle : VARCHAR(150)
+  * número : VARCHAR(20)
+  referencia : VARCHAR(255)
+}
+
+entity "HISTORIAL_ESTADO_PEDIDO" as HIST <<débil>> {
+  * id_pedido : INTEGER <<PK>>
+  * fecha_hora : TIMESTAMPTZ <<PK>>
+  --
+  * estado : ENUM (pendiente_pago | pagado | en_preparación | despachado | entregado |\n    listo_para_retiro | retirado | cancelado)
+  comentario : TEXT
 }
 
 entity "NOTIFICACIÓN" as NOTIF {
-  * id_notificación <<PK>>
+  * id_notificación : INTEGER <<PK>>
   --
-  * tipo
-  * asunto
-  * fecha_envío
-  * estado_envío
+  * tipo : ENUM (verificación_resuelta | cambio_estado_pedido | carrito_abandonado |\n    oferta_promocional)
+  * asunto : VARCHAR(200)
+  * fecha_envío : TIMESTAMPTZ
+  * estado_envío : ENUM (pendiente | enviado | fallido)
+}
+
+entity "LEAD" as LEAD {
+  * id_lead : INTEGER <<PK>>
+  --
+  * email : VARCHAR(254)
+  * fecha_suscripción : TIMESTAMPTZ
+  * origen : ENUM (popup | footer | checkout)
+  * activo : BOOLEAN
+  fecha_baja : TIMESTAMPTZ
+}
+
+entity "PROVEEDOR" as PROVEEDOR {
+  * id_proveedor : INTEGER <<PK>>
+  --
+  * rut : VARCHAR(12)
+  * razón_social : VARCHAR(150)
+  nombre_contacto : VARCHAR(150)
+  teléfono : VARCHAR(20)
+  email : VARCHAR(254)
+  * activo : BOOLEAN
+}
+
+entity "ENTRADA_INVENTARIO" as ENTRADA {
+  * id_entrada : INTEGER <<PK>>
+  --
+  * fecha_recepción : DATE
+  * tipo_documento_proveedor : ENUM (factura | guía_despacho)
+  * número_documento_proveedor : VARCHAR(50)
+  observación : TEXT
+}
+
+entity "LOTE" as LOTE {
+  * id_lote : INTEGER <<PK>>
+  --
+  código_lote_fabricante : VARCHAR(50)
+  fecha_fabricación : DATE
+  fecha_vencimiento : DATE
+  * cantidad_recibida : INTEGER
+  * costo_unitario_neto : DECIMAL(12,2)
+}
+
+entity "BODEGA" as BODEGA {
+  * id_bodega : INTEGER <<PK>>
+  --
+  * nombre : VARCHAR(100)
+  * dirección : VARCHAR(200)
+  * tipo : ENUM (bodega | sala_ventas)
+  * abastece_venta_online : BOOLEAN
+  * activa : BOOLEAN
+}
+
+entity "UBICACIÓN" as UBICACION {
+  * id_ubicación : INTEGER <<PK>>
+  --
+  * código : VARCHAR(30)
+  zona : VARCHAR(20)
+  pasillo : VARCHAR(20)
+  estante : VARCHAR(20)
+  nivel : VARCHAR(20)
+  * activa : BOOLEAN
+}
+
+entity "EXISTENCIA" as EXISTENCIA <<asociativa>> {
+  * id_lote : INTEGER <<PK>>
+  * id_ubicación : INTEGER <<PK>>
+  --
+  * cantidad : INTEGER
+  * fecha_actualización : TIMESTAMPTZ
+}
+
+entity "MOVIMIENTO_INVENTARIO" as MOVIMIENTO {
+  * id_movimiento : INTEGER <<PK>>
+  --
+  * fecha_hora : TIMESTAMPTZ
+  * tipo : ENUM (entrada | venta | reingreso_anulación | merma_vencimiento | merma_daño |\n    consumo_peluquería | transferencia | ajuste_positivo | ajuste_negativo)
+  * cantidad : INTEGER
+  observación : TEXT
+}
+
+entity "REGIÓN" as REGION {
+  * id_región : INTEGER <<PK>>
+  --
+  * código_cut : CHAR(2)
+  * nombre : VARCHAR(100)
+}
+
+entity "PROVINCIA" as PROVINCIA {
+  * id_provincia : INTEGER <<PK>>
+  --
+  * código_cut : CHAR(3)
+  * nombre : VARCHAR(100)
+}
+
+entity "COMUNA" as COMUNA {
+  * id_comuna : INTEGER <<PK>>
+  --
+  * código_cut : CHAR(5)
+  * nombre : VARCHAR(100)
 }
 
 ROL ||--o{ USUARIO : "agrupa"
 ROL ||--o{ ROL_PERMISO : "tiene"
 PERMISO ||--o{ ROL_PERMISO : "se asigna en"
 USUARIO ||--o{ DIRECCION : "tiene"
+USUARIO ||--o{ TOKEN_CORREO : "solicita"
+USUARIO ||--o{ SESION : "inicia"
+USUARIO ||--o| PERFIL_PRO : "completa"
+PERFIL_PRO ||--|{ PERFIL_ESP : "declara"
+ESPECIALIDAD ||--o{ PERFIL_ESP : "se declara en"
 USUARIO ||--o{ SOLICITUD : "presenta"
 USUARIO |o--o{ SOLICITUD : "resuelve"
 SOLICITUD ||--|{ ANTECEDENTE : "incluye"
-USUARIO ||--o{ TOKEN_CORREO : "solicita"
-USUARIO ||--o{ SESION : "inicia"
+MARCA |o--o{ PRODUCTO : "fabrica"
 CATEGORIA |o--o{ CATEGORIA : "tiene subcategorías"
 CATEGORIA ||--o{ PRODUCTO : "clasifica"
+PRODUCTO ||--|{ FORMATO : "se vende en"
+FORMATO ||--o{ COMP_PACK : "arma (pack)"
+FORMATO ||--o{ COMP_PACK : "es componente de"
 PRODUCTO ||--|{ IMAGEN : "tiene"
 USUARIO ||--o| CARRITO : "tiene"
 CARRITO ||--o{ ITEM_CARRITO : "contiene"
-CARRITO |o--o{ NOTIF : "genera recordatorio"
-PRODUCTO ||--o{ ITEM_CARRITO : "aparece en"
+FORMATO ||--o{ ITEM_CARRITO : "aparece en"
 USUARIO ||--o{ PEDIDO : "realiza"
+TASA_IVA ||--o{ PEDIDO : "se aplica a"
 PEDIDO ||--|{ DETALLE : "tiene"
-PRODUCTO ||--o{ DETALLE : "aparece en"
+FORMATO ||--o{ DETALLE : "aparece en"
 PEDIDO ||--o{ PAGO : "se paga con"
-PEDIDO ||--o| ENVIO : "se despacha con"
-PEDIDO ||--o{ DOCUMENTO : "genera"
 PAGO |o--o{ EVENTO_PAGO : "se notifica en"
+USUARIO ||--o{ DATOS_FACT : "registra"
+DATOS_FACT |o--o{ PEDIDO : "se usa en"
+PEDIDO ||--o{ DOCUMENTO : "genera"
+DOCUMENTO |o--o{ DOCUMENTO : "es anulado por"
+PEDIDO ||--o| ENVIO : "se despacha con"
 PEDIDO ||--|{ HIST : "registra"
 USUARIO |o--o{ HIST : "registra cambios"
 USUARIO ||--o{ NOTIF : "recibe"
 PEDIDO |o--o{ NOTIF : "origina"
-DATOS_FACT |o--o{ PEDIDO : "se usa en"
-USUARIO ||--o{ DATOS_FACT : "registra"
-
+CARRITO |o--o{ NOTIF : "genera recordatorio"
+PROVEEDOR ||--o{ ENTRADA : "abastece"
+USUARIO ||--o{ ENTRADA : "recibe"
+ENTRADA ||--|{ LOTE : "ingresa"
+FORMATO ||--o{ LOTE : "se recibe en"
+BODEGA ||--|{ UBICACION : "se divide en"
+LOTE ||--o{ EXISTENCIA : "se almacena en"
+UBICACION ||--o{ EXISTENCIA : "contiene"
+LOTE ||--o{ MOVIMIENTO : "afecta a"
+UBICACION |o--o{ MOVIMIENTO : "es origen de"
+UBICACION |o--o{ MOVIMIENTO : "es destino de"
+USUARIO |o--o{ MOVIMIENTO : "registra"
+PEDIDO |o--o{ MOVIMIENTO : "origina"
+REGION ||--|{ PROVINCIA : "se divide en"
+PROVINCIA ||--|{ COMUNA : "se divide en"
+COMUNA ||--o{ DIRECCION : "ubica"
+COMUNA |o--o{ PERFIL_PRO : "ubica lugar de trabajo"
+COMUNA ||--o{ DATOS_FACT : "ubica"
+COMUNA ||--o{ ENVIO : "es destino de"
+COMUNA ||--o{ BODEGA : "ubica"
 
 @enduml
