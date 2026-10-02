@@ -12,12 +12,15 @@ skinparam usecase {
 actor "Visitante" as V
 actor "Cliente\n(consumidor final B2C)" as C
 actor "Peluquero verificado\n(B2B)" as P
-actor "Personal de tienda" as S
 actor "Dueña\n(administradora)" as D
+actor "Vendedor/a" as VEN
+actor "Bodeguero/a" as BOD
+actor "Administrador/a" as ADM
+
 
 ' Generalizaciones: cada actor hereda lo del anterior
 P --|> C
-D --|> S
+D --|> VEN
 
 ' Actores secundarios
 actor "Mercado Pago" as MP <<sistema externo>>
@@ -70,16 +73,28 @@ rectangle "Plataforma e-commerce Cabello Perfecto" {
     usecase "UC19 Generar descripción\ncon IA" as UC19
     usecase "UC20 Gestionar categorías" as UC20
     usecase "UC21 Configurar precios\npor tipo de cliente" as UC21
-    usecase "UC22 Actualizar estado\nde pedido" as UC22
     usecase "UC23 Gestionar roles\ny permisos" as UC23
     usecase "UC24 Gestionar personal\nde tienda" as UC24
+  }
+
+  package "Bodega" {
+    usecase "UC28 Gestionar productos" as UC28
+    usecase "UC29 Gestionar stock" as UC29
+    usecase "UC30 Gestionar envios" as UC30
+    usecase "UC31 Actualizar estado pedido" as UC31
+  }
+
+  package "Inventario" {
+    usecase "UC31 Consultar stock" as UC32
+    usecase "UC32 Actualizar stock" as UC33
+    usecase "UC33 Mermar productos" as UC34
   }
 }
 
 'Actores primarios -> casos de uso
 V --> UC01
 V --> UC07
-V --> UC28
+
 
 C --> UC03
 C --> UC04
@@ -93,18 +108,30 @@ C --> UC15
 C --> UC26
 C --> UC29
 
-S --> UC03
-S --> UC04
-S --> UC06
-S --> UC14
-S --> UC17
-S --> UC18
-S --> UC20
-S --> UC21
-S --> UC22
+VEN --> UC03
+VEN --> UC04
+VEN --> UC06
+VEN --> UC14
+VEN --> UC17
+
+ADM --> UC18
+ADM --> UC20
+ADM --> UC21
+ADM --> UC32
+ADM --> UC33
+ADM --> UC34
 
 D --> UC23
 D --> UC24
+
+BOD --> UC28
+BOD --> UC29  
+BOD --> UC30
+BOD --> UC31
+BOD --> UC32
+BOD --> UC33
+
+
 
 ' Relaciones entre casos de uso
 UC01 ..> UC02 : <<include>>
@@ -116,6 +143,7 @@ UC05 .up.> UC04 : <<extend>>
 UC11 .up.> UC10 : <<extend>>
 UC19 .up.> UC18 : <<extend>>
 UC27 .up.> UC13 : <<extend>>
+UC33 ..> UC32 : <<extend>>
 
 ' Actores secundarios 
 UC12 --> MP
@@ -124,7 +152,7 @@ UC11 --> ENV
 UC01 --> MAIL
 UC06 --> MAIL
 UC17 --> MAIL
-UC22 --> MAIL
 UC19 --> IA
+UC31 --> MAIL
 
 @enduml
