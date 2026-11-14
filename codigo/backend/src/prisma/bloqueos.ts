@@ -1,0 +1,179 @@
+import { ConflictException, NotFoundException } from '@nestjs/common';
+import type { Prisma } from '../generated/prisma/client.js';
+
+type Tx = Prisma.TransactionClient;
+
+/**
+ * Bloqueos de fila y de transacción (RNF-12, RNF-13). Cada uno dura hasta el fin de la
+ * transacción. Están todos aquí para que dos módulos que protegen el mismo dato tomen el mismo
+ * bloqueo, y para que ningún número de bloqueo de transacción se repita.
+ *
+ * Orden de las filas del catálogo, para que dos transacciones no se esperen entre sí: primero el
+ * artículo, luego el pack o el producto, y después sus formatos en orden de id.
+ */
+
+/**
+ * Bloqueos de transacción (`pg_advisory_xact_lock`) para reglas que abarcan varias filas. Cada
+ * número se usa para una sola regla.
+ */
+export const CANDADOS = {
+  /** Nombres de marca únicos sin distinguir mayúsculas (E3-H4). */
+  MARCAS: 3401,
+  /** Estructura del árbol de categorías, sin ciclos (E3-H4). */
+  CATEGORIAS: 3402,
+  /** Una sola configuración del saludo de cumpleaños (fila CAMPANA `cumpleanos`, E12-H5). */
+  SALUDO_CUMPLEANOS: 1205,
+  /** Slides de la portada: máximo y orden 1..n sin huecos (SCRUM-157). */
+  PORTADA: 1570,
+} as const;
+
+export type Candado = (typeof CANDADOS)[keyof typeof CANDADOS];
+
+export const tomarCandado = async (tx: Tx, candado: Candado): Promise<void> => {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${candado}::bigint)`;
+};
+
+/**
+ * Bloquea la fila de la cuenta y devuelve su id. Los cambios de «mi cuenta» que dependen de su
+ * estado (una sola dirección principal, el RUT frente a la verificación) y la gestión del
+ * personal van de a uno. La aprobación de la verificación (E10) debe tomar este bloqueo antes
+ * de leer el RUT.
+ */
+export const bloquearCuenta = async (
+  tx: Tx,
+  codigoPublico: string,
+  noExiste = 'La cuenta no existe.',
+): Promise<number> => {
+  const [cuenta] = await tx.$queryRaw<{ id: number }[]>`
+    SELECT id_usuario AS id FROM usuario
+    WHERE codigo_publico = ${codigoPublico}
+    FOR UPDATE`;
+  if (!cuenta) throw new NotFoundException(noExiste);
+  return cuenta.id;
+};
+
+/**
+ * El rol de la cuenta cambió después de emitir el token (E13-H3 al bajarlo, E10-H4 al subirlo).
+ */
+export const ROL_CAMBIADO =
+  'El tipo de tu cuenta cambió. Inicia sesión de nuevo para ver tus precios antes de comprar.';
+
+/**
+ * Bloquea la cuenta como `bloquearCuenta` y exige que su rol siga siendo el del token: una
+ * escritura que esperaba el bloqueo mientras le bajaban el rol no actúa con el anterior (409).
+ * Así el carrito no vuelve a guardar un exclusivo ni muestra el mayorista (E13-H3, RNF-04).
+ */
+export const bloquearCuentaConRol = async (
+  tx: Tx,
+  codigoPublico: string,
+  rol: string,
+): Promise<number> => {
+  const [cuenta] = await tx.$queryRaw<{ id: number; rol: string }[]>`
+    SELECT id_usuario AS id, rol FROM usuario
+    WHERE codigo_publico = ${codigoPublico}
+    FOR UPDATE`;
+  if (!cuenta) throw new NotFoundException('La cuenta no existe.');
+  if (cuenta.rol !== rol) throw new ConflictException(ROL_CAMBIADO);
+  return cuenta.id;
+};
+
+/**
+ * Bloquea la fila del suscriptor: dos solicitudes simultáneas del mismo correo no pasan juntas el
+ * tope de confirmaciones (E12-H1).
+ */
+export const bloquearLead = async (tx: Tx, id: number): Promise<void> => {
+  await tx.$queryRaw`SELECT id_lead FROM lead WHERE id_lead = ${id} FOR UPDATE`;
+};
+
+/** Bloquea la fila del artículo de venta (formato o pack): imágenes y precios (E3-H3, E3-H5). */
+export const bloquearArticulo = async (
+  tx: Tx,
+  id: number,
+  noExiste = 'El artículo no existe.',
+): Promise<void> => {
+  const [articulo] = await tx.$queryRaw<{ id: number }[]>`
+    SELECT id_articulo AS id FROM articulo_venta
+    WHERE id_articulo = ${id}
+    FOR UPDATE`;
+  if (!articulo) throw new NotFoundException(noExiste);
+};
+
+/**
+ * Bloquea la fila del producto: su formato predeterminado (E3-H2) y su canal de venta mientras
+ * se fijan precios (E3-H5).
+ */
+export const bloquearProducto = async (tx: Tx, id: number): Promise<void> => {
+  const [producto] = await tx.$queryRaw<{ id: number }[]>`
+    SELECT id_producto AS id FROM producto
+    WHERE id_producto = ${id}
+    FOR UPDATE`;
+  if (!producto) throw new NotFoundException('El producto no existe.');
+};
+
+/**
+ * Bloquea el producto del formato y devuelve su id. Los datos del formato se leen después, con
+ * el bloqueo tomado, para ver lo último que guardó otra transacción.
+ */
+export const bloquearProductoDelFormato = async (
+  tx: Tx,
+  formatoId: number,
+): Promise<number> => {
+  const [producto] = await tx.$queryRaw<{ productoId: number }[]>`
+    SELECT p.id_producto AS "productoId"
+    FROM formato_producto f
+    JOIN producto p ON p.id_producto = f.id_producto
+    WHERE f.id_formato = ${formatoId}
+    FOR UPDATE OF p`;
+  if (!producto) throw new NotFoundException('El formato no existe.');
+  return producto.productoId;
+};
+
+/**
+ * Bloquea los formatos del producto en orden de id, con `FOR NO KEY UPDATE` como las salidas,
+ * los ajustes y la venta (E11-H6, E11-H7). Cambiar el predeterminado toca dos formatos: si los
+ * actualizara en otro orden, se cruzaría con un movimiento de stock que los bloquea de menor a
+ * mayor id y PostgreSQL abortaría a uno de los dos (deadlock).
+ */
+export const bloquearFormatosDelProducto = async (
+  tx: Tx,
+  productoId: number,
+): Promise<void> => {
+  await tx.$queryRaw`
+    SELECT id_formato FROM formato_producto
+    WHERE id_producto = ${productoId}
+    ORDER BY id_formato
+    FOR NO KEY UPDATE`;
+};
+
+/**
+ * Bloquea la fila del pack: su canal de venta mientras se fijan precios (E3-H5) y su canal y
+ * componentes mientras se editan (E3-H6).
+ */
+export const bloquearPack = async (
+  tx: Tx,
+  id: number,
+  noExiste = 'El artículo no existe.',
+): Promise<void> => {
+  const [pack] = await tx.$queryRaw<{ id: number }[]>`
+    SELECT id_pack AS id FROM pack WHERE id_pack = ${id} FOR UPDATE`;
+  if (!pack) throw new NotFoundException(noExiste);
+};
+
+/**
+ * Bloquea para lectura (`FOR SHARE`) los productos de esos formatos, en orden de id: su canal y
+ * si están activos no cambian mientras se guardan como componentes de un pack (E3-H6).
+ */
+export const bloquearProductosDeFormatos = async (
+  tx: Tx,
+  formatoIds: number[],
+): Promise<void> => {
+  if (formatoIds.length === 0) return;
+  await tx.$queryRaw`
+    SELECT p.id_producto FROM producto p
+    WHERE p.id_producto IN (
+      SELECT f.id_producto FROM formato_producto f
+      WHERE f.id_formato = ANY(${formatoIds}::int[])
+    )
+    ORDER BY p.id_producto
+    FOR SHARE`;
+};

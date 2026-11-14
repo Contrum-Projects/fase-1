@@ -1,0 +1,197 @@
+/**
+ * Solo para las pruebas de Productos: datos de ejemplo, el backend simulado en el borde
+ * (`fetch`, como pide CLAUDE.md) y la pantalla con su cliente de consultas.
+ */
+import { QueryClientProvider } from '@tanstack/react-query';
+import { render } from '@testing-library/react';
+import { act, type ReactNode } from 'react';
+import { vi } from 'vitest';
+import type {
+  CategoriaTienda,
+  FormatoPanel,
+  ListadoProductosPanel,
+  MarcaPanel,
+  PreciosArticulo,
+  ProductoListadoPanel,
+  ProductoPanel,
+} from '@/compartido/api/respuestas';
+import { crearClienteDeConsultas } from '@/compartido/proveedores';
+import {
+  guardarSesion,
+  reiniciarParaPruebas,
+} from '@/compartido/sesion/almacen';
+import type { Rol } from '@/compartido/sesion/roles';
+import { Toaster } from '@/compartido/ui/sonner';
+
+export const MARCAS: MarcaPanel[] = [
+  { id: 1, nombre: 'Kérastase', activa: true },
+  { id: 2, nombre: 'Wella', activa: true },
+];
+
+export const ARBOL: CategoriaTienda[] = [
+  {
+    id: 2,
+    nombre: 'Shampoo',
+    descripcion: null,
+    padreId: null,
+    subcategorias: [
+      {
+        id: 4,
+        nombre: 'Reparación',
+        descripcion: null,
+        padreId: 2,
+        subcategorias: [],
+      },
+    ],
+  },
+];
+
+export const producto = (
+  extra: Partial<ProductoPanel> = {},
+): ProductoPanel => ({
+  id: 7,
+  nombre: 'Shampoo reparador',
+  descripcion: 'Repara el cabello dañado.',
+  origenDescripcion: 'manual',
+  ingredientes: null,
+  canalVenta: 'general',
+  activo: true,
+  marca: { id: 1, nombre: 'Kérastase' },
+  categoria: { id: 4, nombre: 'Reparación' },
+  ...extra,
+});
+
+export const formato = (extra: Partial<FormatoPanel> = {}): FormatoPanel => ({
+  id: 21,
+  productoId: 7,
+  sku: 'SH-REP-300',
+  codigoBarras: '7801234567890',
+  nombreFormato: '300 ml',
+  contenido: 300,
+  unidadMedida: 'ml',
+  fechaVencimiento: null,
+  stockMinimo: 5,
+  pesoGramos: 320,
+  altoCm: 18.5,
+  anchoCm: 6,
+  largoCm: 4,
+  esPredeterminado: true,
+  activo: true,
+  imagenes: [],
+  ...extra,
+});
+
+export const precios = (
+  extra: Partial<PreciosArticulo> = {},
+): PreciosArticulo => ({
+  articuloId: 21,
+  exclusivo: false,
+  precioMinoristaNeto: 10916,
+  precioMayoristaNeto: 7134.45,
+  historial: [],
+  porcentajeIva: 19,
+  precioMinoristaConIva: 12990,
+  precioMayoristaConIva: 8490,
+  ...extra,
+});
+
+export const filaListado = (
+  extra: Partial<ProductoListadoPanel> = {},
+): ProductoListadoPanel => ({
+  ...producto(),
+  marcaId: 1,
+  categoriaId: 4,
+  fechaCreacion: '2026-10-28T15:00:00.000Z',
+  imagen: null,
+  formatos: 2,
+  precioDesde: 12990,
+  stockTotal: 18,
+  stockBajo: false,
+  ...extra,
+});
+
+export const listado = (
+  items: ProductoListadoPanel[],
+  extra: Partial<ListadoProductosPanel> = {},
+): ListadoProductosPanel => ({
+  items,
+  total: items.length,
+  pagina: 1,
+  limite: 20,
+  conteos: { todos: 86, exclusivos: 9, stockBajo: 4, inactivos: 3 },
+  ...extra,
+});
+
+export const error = (
+  status: number,
+  message: string | string[],
+  /** Campos a los que pertenece el error (`errores` del backend, SCRUM-150). */
+  campos: string[] = [],
+) =>
+  Response.json(
+    {
+      statusCode: status,
+      message,
+      ...(campos.length > 0 && {
+        errores: campos.flatMap((campo) =>
+          [message].flat().map((mensaje) => ({ campo, mensaje })),
+        ),
+      }),
+    },
+    { status },
+  );
+
+type Manejador = (peticion: Request) => Response | Promise<Response>;
+
+/**
+ * Backend simulado: marcas y categorías siempre; lo demás por «MÉTODO /ruta». Guarda las
+ * peticiones (ruta con su consulta) y los cuerpos enviados, en orden.
+ */
+export const simularBackend = (rutas: Record<string, Manejador>) => {
+  const pedidas: string[] = [];
+  const enviados: unknown[] = [];
+  const fetch = vi.fn(async (peticion: Request) => {
+    const url = new URL(peticion.url);
+    pedidas.push(`${peticion.method} ${url.pathname}${url.search}`);
+    if (peticion.method !== 'GET') {
+      // Solo JSON: el FormData de jsdom no llega al Request de Node (las fotos se revisan
+      // espiando FormData.append)
+      const texto = await peticion.clone().text();
+      if (texto && peticion.headers.get('content-type')?.includes('json')) {
+        enviados.push(JSON.parse(texto));
+      }
+    }
+    const clave = `${peticion.method} ${url.pathname}`;
+    if (clave === 'GET /api/catalogo/marcas') return Response.json(MARCAS);
+    if (clave === 'GET /api/catalogo/categorias') return Response.json(ARBOL);
+    const manejador = rutas[clave];
+    if (!manejador) throw new Error(`Petición no simulada: ${clave}`);
+    return manejador(peticion);
+  });
+  vi.stubGlobal('fetch', fetch);
+  return { pedidas, enviados };
+};
+
+export const iniciarSesion = (rol: Rol = 'administrador') => {
+  reiniciarParaPruebas();
+  act(() =>
+    guardarSesion({
+      tokenAcceso: 'token',
+      expiraEn: 900,
+      usuario: {
+        codigoPublico: 'admin-1',
+        nombre: 'Violeta',
+        apellido: 'Ramírez',
+        rol,
+      },
+    }),
+  );
+};
+
+export const mostrar = (pantalla: ReactNode) =>
+  render(
+    <QueryClientProvider client={crearClienteDeConsultas()}>
+      {pantalla}
+      <Toaster />
+    </QueryClientProvider>,
+  );

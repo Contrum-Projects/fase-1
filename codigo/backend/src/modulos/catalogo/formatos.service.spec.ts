@@ -1,0 +1,608 @@
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '../../generated/prisma/client.js';
+import type { ConfigService } from '@nestjs/config';
+import type { Entorno } from '../../config/entorno.js';
+import type { PrismaService } from '../../prisma/prisma.service.js';
+import type { CrearFormatoDto } from './dto/crear-formato.dto.js';
+import { FormatosService } from './formatos.service.js';
+import { errorDeCampo } from '../../common/errores/error-de-campo.js';
+
+const fila = (extra: object = {}) => ({
+  id: 11,
+  productoId: 5,
+  codigoBarras: '7801234567890',
+  nombreFormato: '300 ml',
+  contenido: new Prisma.Decimal(300),
+  unidadMedida: 'ml',
+  fechaVencimiento: null,
+  stockMinimo: 5,
+  pesoGramos: 320,
+  altoCm: new Prisma.Decimal('18.5'),
+  anchoCm: new Prisma.Decimal(6),
+  largoCm: new Prisma.Decimal(4),
+  esPredeterminado: true,
+  articulo: { sku: 'SHA-REP-300', activo: true, imagenes: [] },
+  ...extra,
+});
+
+const config = {
+  get: vi.fn().mockReturnValue('https://imagenes.cabelloperfecto.cl'),
+} as unknown as ConfigService<Entorno, true>;
+
+const crearPrisma = () => {
+  const prisma = {
+    // Primera consulta: el bloqueo del producto (o del producto del formato)
+    $queryRaw: vi.fn().mockResolvedValue([{ id: 5 }]),
+    producto: { findUnique: vi.fn().mockResolvedValue({ id: 5 }) },
+    articuloVenta: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({ id: 11 }),
+      update: vi.fn().mockResolvedValue({ id: 11 }),
+    },
+    formatoProducto: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      findUnique: vi.fn().mockResolvedValue({ esPredeterminado: false }),
+      findMany: vi.fn().mockResolvedValue([fila()]),
+      count: vi.fn().mockResolvedValue(0),
+      create: vi.fn().mockResolvedValue(fila()),
+      update: vi.fn().mockResolvedValue(fila()),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
+    $transaction: vi.fn(),
+  };
+  prisma.$transaction.mockImplementation(
+    (trabajo: (tx: typeof prisma) => Promise<unknown>) => trabajo(prisma),
+  );
+  return prisma;
+};
+
+const datosNuevos = (
+  extra: Partial<CrearFormatoDto> = {},
+): CrearFormatoDto => ({
+  sku: 'SHA-REP-300',
+  codigoBarras: '7801234567890',
+  nombreFormato: '300 ml',
+  contenido: 300,
+  unidadMedida: 'ml',
+  stockMinimo: 5,
+  pesoGramos: 320,
+  altoCm: 18.5,
+  anchoCm: 6,
+  largoCm: 4,
+  ...extra,
+});
+
+const errorUnico = () =>
+  new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+    code: 'P2002',
+    clientVersion: 'test',
+  });
+
+describe('FormatosService', () => {
+  let prisma: ReturnType<typeof crearPrisma>;
+  let servicio: FormatosService;
+
+  beforeEach(() => {
+    prisma = crearPrisma();
+    servicio = new FormatosService(prisma as unknown as PrismaService, config);
+  });
+
+  describe('crear', () => {
+    it('E3-H2 · formato creado: se agrega al producto con sus datos, como artículo de tipo formato y sin precios', async () => {
+      const creado = await servicio.crear(5, datosNuevos());
+
+      expect(prisma.articuloVenta.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { sku: 'SHA-REP-300', tipo: 'formato' },
+        }),
+      );
+      expect(prisma.formatoProducto.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            id: 11,
+            productoId: 5,
+            codigoBarras: '7801234567890',
+            nombreFormato: '300 ml',
+            contenido: 300,
+            unidadMedida: 'ml',
+            fechaVencimiento: null,
+            stockMinimo: 5,
+            pesoGramos: 320,
+            altoCm: 18.5,
+            anchoCm: 6,
+            largoCm: 4,
+            esPredeterminado: true,
+          },
+        }),
+      );
+      expect(creado).toEqual({
+        id: 11,
+        productoId: 5,
+        sku: 'SHA-REP-300',
+        codigoBarras: '7801234567890',
+        nombreFormato: '300 ml',
+        contenido: 300,
+        unidadMedida: 'ml',
+        fechaVencimiento: null,
+        stockMinimo: 5,
+        pesoGramos: 320,
+        altoCm: 18.5,
+        anchoCm: 6,
+        largoCm: 4,
+        esPredeterminado: true,
+        activo: true,
+        imagenes: [],
+      });
+    });
+
+    it('E3-H2 · formato creado: bloquea la fila del producto antes de contar sus formatos', async () => {
+      await servicio.crear(5, datosNuevos());
+
+      const consulta = (
+        prisma.$queryRaw.mock.calls[0][0] as TemplateStringsArray
+      ).join('');
+      expect(consulta).toMatch(/FROM producto/);
+      expect(consulta).toMatch(/FOR UPDATE/);
+    });
+
+    it('E3-H2 · formato creado: sin código de barras ni contenido, el stock mínimo queda en 0', async () => {
+      await servicio.crear(
+        5,
+        datosNuevos({
+          codigoBarras: undefined,
+          contenido: undefined,
+          unidadMedida: undefined,
+          stockMinimo: undefined,
+        }),
+      );
+
+      expect(prisma.formatoProducto.findFirst).not.toHaveBeenCalled();
+      expect(prisma.formatoProducto.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            codigoBarras: null,
+            contenido: null,
+            unidadMedida: null,
+            stockMinimo: 0,
+          }),
+        }),
+      );
+    });
+
+    it('E3-H2 · producto inexistente: responde 404 y no guarda nada', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      await expect(servicio.crear(99, datosNuevos())).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prisma.articuloVenta.create).not.toHaveBeenCalled();
+    });
+
+    it('E3-H2 · contenido sin unidad de medida (o al revés): rechaza con 400', async () => {
+      await expect(
+        servicio.crear(5, datosNuevos({ unidadMedida: undefined })),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        servicio.crear(5, datosNuevos({ contenido: null })),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.articuloVenta.create).not.toHaveBeenCalled();
+    });
+
+    it('E3-H2 · SKU repetido: rechaza con 409, indica el SKU y no guarda nada', async () => {
+      prisma.articuloVenta.findFirst.mockResolvedValue({ id: 3 });
+
+      const error = await servicio
+        .crear(5, datosNuevos())
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).message).toBe(
+        'El SKU ya pertenece a otro artículo.',
+      );
+      expect(prisma.articuloVenta.create).not.toHaveBeenCalled();
+    });
+
+    it('E3-H2 · código de barras repetido: rechaza con 409 e indica el código de barras', async () => {
+      prisma.formatoProducto.findFirst.mockResolvedValue({ id: 4 });
+
+      await expect(servicio.crear(5, datosNuevos())).rejects.toThrow(
+        errorDeCampo(
+          ConflictException,
+          'El código de barras ya pertenece a otro artículo.',
+          'codigoBarras',
+        ),
+      );
+      expect(prisma.articuloVenta.create).not.toHaveBeenCalled();
+    });
+
+    it('E3-H2 · SKU y código de barras repetidos: el mensaje indica los dos', async () => {
+      prisma.articuloVenta.findFirst.mockResolvedValue({ id: 3 });
+      prisma.formatoProducto.findFirst.mockResolvedValue({ id: 4 });
+
+      await expect(servicio.crear(5, datosNuevos())).rejects.toThrow(
+        'El SKU y el código de barras ya pertenecen a otro artículo.',
+      );
+    });
+
+    it('E3-H2 · SKU guardado a la vez por otra petición (P2002): vuelve a revisar e indica el dato repetido', async () => {
+      prisma.articuloVenta.create.mockRejectedValue(errorUnico());
+      // Libre al revisar dentro de la transacción; ocupado al revisar de nuevo tras el choque
+      prisma.articuloVenta.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 3 });
+
+      await expect(servicio.crear(5, datosNuevos())).rejects.toThrow(
+        errorDeCampo(
+          ConflictException,
+          'El SKU ya pertenece a otro artículo.',
+          'sku',
+        ),
+      );
+    });
+
+    it('E3-H2 · fecha de vencimiento opcional: se guarda como fecha y se devuelve en AAAA-MM-DD', async () => {
+      prisma.formatoProducto.create.mockResolvedValue(
+        fila({ fechaVencimiento: new Date('2027-12-31T00:00:00Z') }),
+      );
+
+      const creado = await servicio.crear(
+        5,
+        datosNuevos({ fechaVencimiento: '2027-12-31' }),
+      );
+
+      expect(prisma.formatoProducto.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            fechaVencimiento: new Date('2027-12-31T00:00:00Z'),
+          }),
+        }),
+      );
+      expect(creado.fechaVencimiento).toBe('2027-12-31');
+    });
+
+    it('E3-H2 · formato predeterminado: el primer formato del producto queda predeterminado aunque no se pida', async () => {
+      prisma.formatoProducto.count.mockResolvedValue(0);
+
+      await servicio.crear(5, datosNuevos({ esPredeterminado: false }));
+
+      expect(prisma.formatoProducto.updateMany).not.toHaveBeenCalled();
+      expect(prisma.formatoProducto.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ esPredeterminado: true }),
+        }),
+      );
+    });
+
+    it('E3-H2 · formato predeterminado: con otros formatos, uno nuevo sin marcar no cambia el predeterminado', async () => {
+      prisma.formatoProducto.count.mockResolvedValue(2);
+
+      await servicio.crear(5, datosNuevos());
+
+      expect(prisma.formatoProducto.updateMany).not.toHaveBeenCalled();
+      expect(prisma.formatoProducto.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ esPredeterminado: false }),
+        }),
+      );
+    });
+
+    it('E3-H2 · formato predeterminado: un nuevo formato marcado desmarca a los demás del producto', async () => {
+      prisma.formatoProducto.count.mockResolvedValue(2);
+
+      await servicio.crear(5, datosNuevos({ esPredeterminado: true }));
+
+      expect(prisma.formatoProducto.updateMany).toHaveBeenCalledWith({
+        where: { productoId: 5, esPredeterminado: true },
+        data: { esPredeterminado: false },
+      });
+      expect(prisma.formatoProducto.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ esPredeterminado: true }),
+        }),
+      );
+    });
+  });
+
+  describe('actualizar', () => {
+    beforeEach(() => {
+      prisma.$queryRaw.mockResolvedValue([{ productoId: 5 }]);
+    });
+
+    it('cambia el SKU antes de bloquear los formatos: el mismo orden del pedido, sin deadlock (E5-H3)', async () => {
+      await servicio.actualizar(11, { esPredeterminado: true, sku: 'SHA-2' });
+
+      const bloqueo = prisma.$queryRaw.mock.calls.findIndex(([partes]) =>
+        (partes as string[]).join('?').includes('FOR NO KEY UPDATE'),
+      );
+      expect(
+        prisma.articuloVenta.update.mock.invocationCallOrder[0],
+      ).toBeLessThan(prisma.$queryRaw.mock.invocationCallOrder[bloqueo]);
+    });
+
+    it('E3-H2 · formato predeterminado: marcar uno lo deja como el único predeterminado del producto', async () => {
+      await servicio.actualizar(11, { esPredeterminado: true });
+
+      expect(prisma.formatoProducto.updateMany).toHaveBeenCalledWith({
+        where: { productoId: 5, esPredeterminado: true, id: { not: 11 } },
+        data: { esPredeterminado: false },
+      });
+      expect(prisma.formatoProducto.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 11 },
+          data: expect.objectContaining({ esPredeterminado: true }),
+        }),
+      );
+    });
+
+    it('RNF-13 · formato predeterminado: bloquea los formatos del producto en orden de id antes de cambiarlos', async () => {
+      await servicio.actualizar(11, { esPredeterminado: true });
+
+      const llamada = prisma.$queryRaw.mock.calls.findIndex(([partes]) =>
+        (partes as string[]).join('?').includes('FOR NO KEY UPDATE'),
+      );
+      expect(llamada).toBeGreaterThan(-1);
+      const [partes, productoId] = prisma.$queryRaw.mock.calls[llamada] as [
+        string[],
+        number,
+      ];
+      expect(partes.join('?')).toContain('ORDER BY id_formato');
+      expect(productoId).toBe(5);
+      expect(prisma.$queryRaw.mock.invocationCallOrder[llamada]).toBeLessThan(
+        prisma.formatoProducto.updateMany.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('RNF-13 · formato predeterminado: si no cambia el predeterminado, no bloquea los demás formatos', async () => {
+      await servicio.actualizar(11, { nombreFormato: '500 ml' });
+
+      expect(
+        prisma.$queryRaw.mock.calls.some(([partes]) =>
+          (partes as string[]).join('?').includes('FOR NO KEY UPDATE'),
+        ),
+      ).toBe(false);
+    });
+
+    it('E3-H2 · formato predeterminado: no se puede desmarcar el predeterminado (400)', async () => {
+      prisma.formatoProducto.findUnique.mockResolvedValue({
+        esPredeterminado: true,
+      });
+
+      await expect(
+        servicio.actualizar(11, { esPredeterminado: false }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.formatoProducto.update).not.toHaveBeenCalled();
+    });
+
+    it('E3-H2 · cambia solo lo que llega; null borra la fecha de vencimiento y el código de barras', async () => {
+      await servicio.actualizar(11, {
+        nombreFormato: '500 ml',
+        fechaVencimiento: null,
+        codigoBarras: null,
+      });
+
+      expect(prisma.articuloVenta.update).not.toHaveBeenCalled();
+      expect(prisma.formatoProducto.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            nombreFormato: '500 ml',
+            fechaVencimiento: null,
+            codigoBarras: null,
+            contenido: undefined,
+            unidadMedida: undefined,
+            stockMinimo: undefined,
+            pesoGramos: undefined,
+            altoCm: undefined,
+            anchoCm: undefined,
+            largoCm: undefined,
+            esPredeterminado: undefined,
+          },
+        }),
+      );
+    });
+
+    it('E3-H2 · SKU nuevo: se guarda en el artículo y se compara con los demás artículos', async () => {
+      await servicio.actualizar(11, { sku: 'SHA-REP-500' });
+
+      expect(prisma.articuloVenta.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { sku: 'SHA-REP-500', id: { not: 11 } },
+        }),
+      );
+      expect(prisma.articuloVenta.update).toHaveBeenCalledWith({
+        where: { id: 11 },
+        data: { sku: 'SHA-REP-500' },
+      });
+    });
+
+    it('E3-H2 · SKU o código de barras repetido al editar: rechaza con 409 y no cambia nada', async () => {
+      prisma.formatoProducto.findFirst.mockResolvedValue({ id: 4 });
+
+      await expect(
+        servicio.actualizar(11, { codigoBarras: '78012345' }),
+      ).rejects.toThrow('El código de barras ya pertenece a otro artículo.');
+      expect(prisma.formatoProducto.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { codigoBarras: '78012345', id: { not: 11 } },
+        }),
+      );
+      expect(prisma.formatoProducto.update).not.toHaveBeenCalled();
+    });
+
+    it('E3-H2 · formato inexistente: responde 404', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      await expect(
+        servicio.actualizar(99, { nombreFormato: 'X' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('E3-H2 · cuerpo vacío o contenido sin su unidad: rechaza con 400', async () => {
+      await expect(servicio.actualizar(11, {})).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      await expect(
+        servicio.actualizar(11, { contenido: 500 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listar', () => {
+    it('E3-H2 · fecha de vencimiento: el listado del panel la devuelve, con el predeterminado primero', async () => {
+      prisma.formatoProducto.findMany.mockResolvedValue([
+        fila({ fechaVencimiento: new Date('2027-12-31T00:00:00Z') }),
+      ]);
+
+      const formatos = await servicio.listar(5);
+
+      expect(prisma.formatoProducto.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { productoId: 5 },
+          orderBy: [{ esPredeterminado: 'desc' }, { id: 'asc' }],
+        }),
+      );
+      expect(formatos[0].fechaVencimiento).toBe('2027-12-31');
+    });
+
+    it('E3-H3 · imagen agregada: la ficha del formato incluye las imágenes de su artículo, con su URL pública', async () => {
+      prisma.formatoProducto.findMany.mockResolvedValue([
+        fila({
+          articulo: {
+            sku: 'SHA-REP-300',
+            activo: true,
+            imagenes: [
+              {
+                id: 3,
+                ubicacionArchivo: 'articulos/11/a.webp',
+                orden: 1,
+                esPrincipal: true,
+              },
+            ],
+          },
+        }),
+      ]);
+
+      const [formato] = await servicio.listar(5);
+
+      expect(formato.imagenes).toEqual([
+        {
+          id: 3,
+          url: 'https://imagenes.cabelloperfecto.cl/articulos/11/a.webp',
+          orden: 1,
+          esPrincipal: true,
+        },
+      ]);
+    });
+
+    it('E3-H2 · producto inexistente: responde 404', async () => {
+      prisma.producto.findUnique.mockResolvedValue(null);
+
+      await expect(servicio.listar(99)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('buscar', () => {
+    const filaBuscada = (extra: object = {}) => ({
+      id: 21,
+      nombreFormato: '300 ml',
+      articulo: {
+        sku: 'SH-REP-300',
+        precioMinoristaNeto: new Prisma.Decimal('10916.4'),
+      },
+      producto: { id: 7, nombre: 'Shampoo reparador', canalVenta: 'general' },
+      ...extra,
+    });
+
+    const prismaBusqueda = (filas: object[], stock: object[] = []) => {
+      const prisma = {
+        formatoProducto: {
+          findMany: vi.fn().mockResolvedValue(filas),
+          count: vi.fn().mockResolvedValue(filas.length),
+        },
+        existencia: { groupBy: vi.fn().mockResolvedValue(stock) },
+        $transaction: vi.fn((consultas: Promise<unknown>[]) =>
+          Promise.all(consultas),
+        ),
+      };
+      const servicio = new FormatosService(
+        prisma as unknown as PrismaService,
+        { get: vi.fn().mockReturnValue(19) } as unknown as ConfigService<
+          Entorno,
+          true
+        >,
+      );
+      return { prisma, servicio };
+    };
+
+    it('E3-H6 · solo formatos: busca en producto, formato y SKU, solo activos y sin packs', async () => {
+      const { prisma, servicio } = prismaBusqueda([]);
+      await servicio.buscar({ buscar: 'rep_' });
+      const { where, skip, take } = prisma.formatoProducto.findMany.mock
+        .calls[0][0] as { where: object; skip: number; take: number };
+      const texto = { contains: 'rep\\_', mode: 'insensitive' };
+      expect(where).toEqual({
+        articulo: { activo: true },
+        producto: { activo: true },
+        OR: [
+          { producto: { nombre: texto } },
+          { nombreFormato: texto },
+          { articulo: { sku: texto } },
+        ],
+      });
+      expect({ skip, take }).toEqual({ skip: 0, take: 20 });
+      // Sin resultados no consulta el stock
+      expect(prisma.existencia.groupBy).not.toHaveBeenCalled();
+    });
+
+    it('E3-H6 · cada formato lleva su stock en ubicaciones activas y el precio minorista con IVA', async () => {
+      const { prisma, servicio } = prismaBusqueda(
+        [
+          filaBuscada(),
+          filaBuscada({
+            id: 22,
+            articulo: { sku: 'SH-REP-1L', precioMinoristaNeto: null },
+          }),
+        ],
+        [{ formatoId: 21, _sum: { cantidad: 2 } }],
+      );
+      const listado = await servicio.buscar({ pagina: 2, limite: 5 });
+      expect(prisma.existencia.groupBy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            formatoId: { in: [21, 22] },
+            ubicacion: { activa: true, bodega: { activa: true } },
+          },
+        }),
+      );
+      expect(listado).toEqual({
+        items: [
+          {
+            formatoId: 21,
+            sku: 'SH-REP-300',
+            nombreFormato: '300 ml',
+            producto: { id: 7, nombre: 'Shampoo reparador' },
+            canalVenta: 'general',
+            stockTotal: 2,
+            precioMinoristaNeto: 10916.4,
+            precioMinoristaConIva: 12990,
+          },
+          expect.objectContaining({
+            formatoId: 22,
+            stockTotal: 0,
+            precioMinoristaNeto: null,
+            precioMinoristaConIva: null,
+          }),
+        ],
+        total: 2,
+        pagina: 2,
+        limite: 5,
+      });
+    });
+  });
+});

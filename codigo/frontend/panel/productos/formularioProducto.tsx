@@ -1,0 +1,424 @@
+'use client';
+
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useId, useState, type ReactNode } from 'react';
+import { Controller, useForm, useWatch } from 'react-hook-form';
+import { toast } from 'sonner';
+import { api } from '@/compartido/api/cliente';
+import {
+  ErrorDeApi,
+  errorDeApi,
+  exigir,
+  repartirErrores,
+} from '@/compartido/api/errores';
+import type { ProductoPanel } from '@/compartido/api/respuestas';
+import { Alert, AlertDescription } from '@/compartido/ui/alert';
+import { Button } from '@/compartido/ui/button';
+import { Input } from '@/compartido/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/compartido/ui/select';
+import { Spinner } from '@/compartido/ui/spinner';
+import { Switch } from '@/compartido/ui/switch';
+import { Textarea } from '@/compartido/ui/textarea';
+import { useCategorias, useMarcas } from '@/panel/catalogo/consultasCatalogo';
+import { opcionesDeCategoria } from '@/panel/catalogo/esquemaCatalogo';
+import { CampoFormulario } from '@/tienda/cuenta/campoFormulario';
+import { clavePreciosProducto } from './consultasPrecios';
+import { AvisoAlSalir } from './avisoAlSalir';
+import {
+  CLAVE_PRODUCTOS,
+  claveProducto,
+  useSugerirDescripcion,
+  type SugerenciaDescripcion,
+} from './consultasProductos';
+import {
+  PRODUCTO_VACIO,
+  CAMPOS_PRODUCTO,
+  cuerpoProducto,
+  esquemaProducto,
+  productoAFormulario,
+  type FormularioProducto,
+  type SalidaProducto,
+  type SugerenciaUsada,
+} from './esquemaProducto';
+import { OrigenDescripcionProducto, SinDescripcion } from './etiquetasProducto';
+import { urlProducto } from './listaProductos';
+import { SugerenciaDescripcionProducto } from './sugerenciaDescripcion';
+
+/** Tarjeta de Figma (P3 2029:742): superficie, borde y título. */
+export const Tarjeta = ({
+  titulo,
+  extra,
+  children,
+}: {
+  titulo: string;
+  extra?: ReactNode;
+  children: ReactNode;
+}) => {
+  const idTitulo = useId();
+  return (
+    <section
+      aria-labelledby={idTitulo}
+      className="flex flex-col gap-4 rounded-lg border bg-card p-4 lg:p-6"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <h2 id={idTitulo} className="texto-cuerpo-fuerte text-texto-principal">
+          {titulo}
+        </h2>
+        {extra}
+      </div>
+      {children}
+    </section>
+  );
+};
+
+/**
+ * Datos y descripción del producto (Figma P3 2029:742 y 2029:763, E3-H1 criterios 2 y 4). Los
+ * formatos y las fotos van aparte (SCRUM-101 y 102); la sugerencia de IA, al lado (SCRUM-132).
+ */
+export function FormularioProductoPanel({
+  producto,
+  titulo,
+}: {
+  /** Sin producto: nuevo. */
+  producto?: ProductoPanel;
+  /** El título de la página con lo que lo acompaña (estado del producto). */
+  titulo: ReactNode;
+}) {
+  const router = useRouter();
+  const clienteConsultas = useQueryClient();
+  const marcas = useMarcas();
+  const categorias = useCategorias();
+  const [aviso, setAviso] = useState<string | null>(null);
+  const sugerir = useSugerirDescripcion();
+  /** La sugerencia que se usó o editó en la descripción y aún no se guarda (E4-H2). */
+  const [sugerenciaUsada, setSugerenciaUsada] =
+    useState<SugerenciaUsada | null>(null);
+  const {
+    register,
+    control,
+    handleSubmit,
+    setError,
+    setValue,
+    setFocus,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<FormularioProducto, unknown, SalidaProducto>({
+    resolver: zodResolver(esquemaProducto),
+    defaultValues: producto ? productoAFormulario(producto) : PRODUCTO_VACIO,
+  });
+
+  /** El chip «Sin descripción aún» del producto nuevo se quita al escribir o usar la sugerencia. */
+  const descripcionEscrita = useWatch({ control, name: 'descripcion' }) !== '';
+
+  // Solo hay marcas activas en la lista: la de un producto con su marca desactivada se agrega
+  // para no mostrar el campo vacío (al guardar, el backend avisa que está desactivada)
+  const opcionesMarca = [...(marcas.data ?? [])];
+  if (
+    producto?.marca &&
+    !opcionesMarca.some((marca) => marca.id === producto.marca?.id)
+  ) {
+    opcionesMarca.push({ ...producto.marca, activa: false });
+  }
+  const opcionesCategoria = opcionesDeCategoria(categorias.data ?? []);
+
+  /**
+   * «Usar» y «Editar» (E4-H2 criterio 1): la sugerencia pasa a la descripción y, si la foto los
+   * muestra, a los ingredientes. Al guardar se reenvía con su firma y el backend decide si queda
+   * «IA» o «IA editada»; sin firma, el texto se guarda como manual.
+   */
+  const usarSugerencia = (
+    { descripcion, ingredientes, firma }: SugerenciaDescripcion,
+    editar: boolean,
+  ) => {
+    if (!descripcion) return;
+    const opciones = { shouldDirty: true, shouldValidate: true };
+    setValue('descripcion', descripcion, opciones);
+    if (ingredientes) setValue('ingredientes', ingredientes, opciones);
+    setSugerenciaUsada(firma ? { descripcion, firma } : null);
+    if (editar) setFocus('descripcion');
+  };
+
+  const mostrarError = (fallo: ErrorDeApi) => {
+    if (![400, 404].includes(fallo.estado)) {
+      setAviso(fallo.message);
+      return;
+    }
+    const { porCampo, generales } = repartirErrores(fallo, CAMPOS_PRODUCTO);
+    for (const [campo, mensaje] of porCampo) {
+      setError(campo, { type: 'server', message: mensaje });
+    }
+    if (generales.length > 0) setAviso(generales.join(' '));
+  };
+
+  const enviar = async (datos: SalidaProducto) => {
+    setAviso(null);
+    try {
+      const guardado = exigir<ProductoPanel>(
+        producto
+          ? await api.PATCH('/api/catalogo/productos/{id}', {
+              params: { path: { id: producto.id } },
+              body: cuerpoProducto(datos, sugerenciaUsada),
+            })
+          : await api.POST('/api/catalogo/productos', {
+              body: cuerpoProducto(datos, sugerenciaUsada),
+            }),
+      );
+      // Ya quedó guardada: salir no pierde nada
+      setSugerenciaUsada(null);
+      clienteConsultas.setQueryData(claveProducto(guardado.id), guardado);
+      await Promise.all([
+        clienteConsultas.invalidateQueries({
+          queryKey: [...CLAVE_PRODUCTOS, 'lista'],
+        }),
+        // Si pasó a exclusivo, sus formatos ya no llevan precio minorista (E3-H5 criterio 2)
+        clienteConsultas.invalidateQueries({
+          queryKey: clavePreciosProducto(guardado.id),
+        }),
+      ]);
+      if (producto) {
+        reset(productoAFormulario(guardado));
+        toast.success(`Guardamos los cambios de ${guardado.nombre}.`);
+        return;
+      }
+      toast.success(`Creamos el producto ${guardado.nombre}.`);
+      router.replace(urlProducto(guardado.id));
+    } catch (error) {
+      // Sin conexión, fetch lanza TypeError: se muestra el mensaje genérico
+      mostrarError(error instanceof ErrorDeApi ? error : errorDeApi(undefined));
+    }
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit(enviar)}
+      noValidate
+      aria-label={producto ? 'Editar producto' : 'Producto nuevo'}
+      className="flex flex-col gap-4 lg:gap-6"
+    >
+      <AvisoAlSalir activo={sugerir.isSuccess || sugerenciaUsada !== null} />
+      <div className="flex flex-wrap items-center gap-3 lg:gap-4">
+        {titulo}
+        <div className="flex gap-3 max-lg:hidden">
+          <AccionesProducto enviando={isSubmitting} />
+        </div>
+      </div>
+      {aviso && (
+        <Alert variant="destructive">
+          <AlertDescription>{aviso}</AlertDescription>
+        </Alert>
+      )}
+      {/* Celular y pantallas medianas: la sugerencia arriba (Figma 2024:505). Desde xl, a la
+          derecha como el asistente de Figma (2029:830); antes, la columna de 372 px aplasta
+          los datos (igual que en packs) */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:gap-6 xl:grid-cols-[minmax(0,1fr)_372px]">
+        <SugerenciaDescripcionProducto
+          sugerir={sugerir}
+          alUsar={usarSugerencia}
+          className="xl:col-start-2 xl:row-span-2 xl:row-start-1"
+        />
+        <Tarjeta titulo="Datos del producto">
+          {/* Celular y escritorio con la sugerencia al lado (xl): el nombre arriba y marca con
+            categoría lado a lado (Figma 2024:544 y 2029:742). Entre lg y xl la tarjeta va a
+            todo el ancho: los tres en una fila. */}
+          <div className="grid grid-cols-2 gap-x-3 gap-y-4 lg:grid-cols-4 xl:grid-cols-2">
+            <CampoFormulario
+              id="producto-nombre"
+              etiqueta="Nombre"
+              obligatorio
+              error={errors.nombre?.message}
+              className="col-span-2"
+            >
+              {(propsControl) => (
+                <Input
+                  {...propsControl}
+                  autoComplete="off"
+                  {...register('nombre')}
+                />
+              )}
+            </CampoFormulario>
+            <CampoFormulario
+              id="producto-marca"
+              etiqueta="Marca"
+              obligatorio
+              error={errors.marcaId?.message}
+            >
+              {(propsControl) => (
+                <Controller
+                  control={control}
+                  name="marcaId"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger
+                        {...propsControl}
+                        ref={field.ref}
+                        onBlur={field.onBlur}
+                        className="w-full"
+                      >
+                        <SelectValue placeholder="Elige una marca" />
+                      </SelectTrigger>
+                      <SelectContent position="popper">
+                        {opcionesMarca.map((marca) => (
+                          <SelectItem key={marca.id} value={String(marca.id)}>
+                            {marca.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              )}
+            </CampoFormulario>
+            <CampoFormulario
+              id="producto-categoria"
+              etiqueta="Categoría"
+              obligatorio
+              error={errors.categoriaId?.message}
+            >
+              {(propsControl) => (
+                <Controller
+                  control={control}
+                  name="categoriaId"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger
+                        {...propsControl}
+                        ref={field.ref}
+                        onBlur={field.onBlur}
+                        className="w-full"
+                      >
+                        <SelectValue placeholder="Elige una categoría" />
+                      </SelectTrigger>
+                      {/* No pasa del ancho de la página: las rutas largas hacen salto de línea */}
+                      <SelectContent
+                        position="popper"
+                        className="max-w-(--radix-select-content-available-width)"
+                      >
+                        {opcionesCategoria.map((opcion) => (
+                          <SelectItem key={opcion.id} value={String(opcion.id)}>
+                            {opcion.ruta}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              )}
+            </CampoFormulario>
+          </div>
+          <Controller
+            control={control}
+            name="exclusivo"
+            render={({ field }) => (
+              <div className="flex items-center gap-3">
+                <Switch
+                  id="producto-exclusivo"
+                  ref={field.ref}
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                  onBlur={field.onBlur}
+                  aria-invalid={errors.exclusivo ? true : undefined}
+                  aria-describedby={
+                    errors.exclusivo
+                      ? 'producto-exclusivo-ayuda producto-exclusivo-error'
+                      : 'producto-exclusivo-ayuda'
+                  }
+                />
+                <div className="flex min-w-0 flex-col">
+                  <label
+                    htmlFor="producto-exclusivo"
+                    className="texto-etiqueta text-texto-principal"
+                  >
+                    Exclusivo para profesionales
+                  </label>
+                  <span
+                    id="producto-exclusivo-ayuda"
+                    className="texto-leyenda text-texto-secundario"
+                  >
+                    Solo lo ven y compran peluqueros verificados
+                  </span>
+                  {errors.exclusivo?.message && (
+                    <span
+                      id="producto-exclusivo-error"
+                      className="texto-pequeno text-destructive"
+                    >
+                      {errors.exclusivo.message}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          />
+        </Tarjeta>
+        <Tarjeta
+          titulo="Descripción"
+          extra={
+            producto ? (
+              <OrigenDescripcionProducto origen={producto.origenDescripcion} />
+            ) : (
+              !descripcionEscrita && <SinDescripcion />
+            )
+          }
+        >
+          <CampoFormulario
+            id="producto-descripcion"
+            etiqueta="Descripción del producto"
+            obligatorio
+            error={errors.descripcion?.message}
+          >
+            {(propsControl) => (
+              <Textarea
+                {...propsControl}
+                placeholder="Escribe la descripción o usa la sugerencia"
+                className={CLASE_AREA_TEXTO}
+                {...register('descripcion')}
+              />
+            )}
+          </CampoFormulario>
+          {/* Sin Figma: opcional, se llena con la sugerencia y se puede corregir (E4-H2) */}
+          <CampoFormulario
+            id="producto-ingredientes"
+            etiqueta="Ingredientes"
+            error={errors.ingredientes?.message}
+          >
+            {(propsControl) => (
+              <Textarea
+                {...propsControl}
+                className={CLASE_AREA_TEXTO}
+                {...register('ingredientes')}
+              />
+            )}
+          </CampoFormulario>
+        </Tarjeta>
+      </div>
+      <div className="flex flex-col-reverse gap-3 lg:hidden">
+        <AccionesProducto enviando={isSubmitting} />
+      </div>
+    </form>
+  );
+}
+
+/** Área de texto del panel (Figma P3 2029:768). */
+const CLASE_AREA_TEXTO =
+  'min-h-28 rounded-md border-[1.5px] border-input bg-fondo-hueso px-4 py-3 texto-cuerpo shadow-none focus-visible:ring-ring/40 lg:texto-pequeno';
+
+/** «Cancelar» vuelve al listado sin guardar; «Guardar producto» envía (Figma 2029:730). */
+const AccionesProducto = ({ enviando }: { enviando: boolean }) => (
+  <>
+    <Button asChild variant="contorno">
+      <Link href="/panel/productos">Cancelar</Link>
+    </Button>
+    <Button type="submit" disabled={enviando}>
+      {enviando && <Spinner aria-hidden />}
+      Guardar producto
+    </Button>
+  </>
+);
