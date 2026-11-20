@@ -1,6 +1,6 @@
 -- Cabello Perfecto — script SQL de la base de datos (PostgreSQL 17)
--- Esquema completo: 45 tablas con sus índices, restricciones y llaves foráneas.
--- Generado desde prisma/schema.prisma del backend (main, 06fb025) con:
+-- Esquema completo: 46 tablas con sus índices, restricciones y llaves foráneas.
+-- Generado desde prisma/schema.prisma del backend (main, 91bccd8) con:
 --   prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script
 -- Uso: psql -d cabello_perfecto -f cabello_perfecto_esquema.sql
 -- Datos iniciales (regiones, comunas, cuenta admin): pnpm db:seed en el backend.
@@ -628,6 +628,24 @@ CREATE TABLE "slide_portada" (
     CONSTRAINT "slide_portada_pkey" PRIMARY KEY ("id_slide")
 );
 
+-- CreateTable
+CREATE TABLE "registro_error" (
+    "id_registro_error" SERIAL NOT NULL,
+    "codigo_seguimiento" VARCHAR(64) NOT NULL,
+    "fecha_hora" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "origen" VARCHAR(20) NOT NULL,
+    "componente" VARCHAR(150) NOT NULL,
+    "metodo" VARCHAR(10),
+    "ruta" VARCHAR(500),
+    "estado_http" INTEGER,
+    "tipo_error" VARCHAR(100) NOT NULL,
+    "mensaje" VARCHAR(1000) NOT NULL,
+    "traza" TEXT,
+    "id_usuario" INTEGER,
+
+    CONSTRAINT "registro_error_pkey" PRIMARY KEY ("id_registro_error")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "usuario_codigo_publico_key" ON "usuario"("codigo_publico");
 
@@ -780,6 +798,15 @@ CREATE UNIQUE INDEX "comuna_codigo_cut_key" ON "comuna"("codigo_cut");
 
 -- CreateIndex
 CREATE INDEX "comuna_id_region_idx" ON "comuna"("id_region");
+
+-- CreateIndex
+CREATE INDEX "registro_error_fecha_hora_idx" ON "registro_error"("fecha_hora");
+
+-- CreateIndex
+CREATE INDEX "registro_error_codigo_seguimiento_idx" ON "registro_error"("codigo_seguimiento");
+
+-- CreateIndex
+CREATE INDEX "registro_error_id_usuario_idx" ON "registro_error"("id_usuario");
 
 -- AddForeignKey
 ALTER TABLE "direccion" ADD CONSTRAINT "direccion_id_usuario_fkey" FOREIGN KEY ("id_usuario") REFERENCES "usuario"("id_usuario") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -987,4 +1014,7 @@ ALTER TABLE "movimiento_inventario" ADD CONSTRAINT "movimiento_inventario_id_ped
 
 -- AddForeignKey
 ALTER TABLE "comuna" ADD CONSTRAINT "comuna_id_region_fkey" FOREIGN KEY ("id_region") REFERENCES "region"("id_region") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "registro_error" ADD CONSTRAINT "registro_error_id_usuario_fkey" FOREIGN KEY ("id_usuario") REFERENCES "usuario"("id_usuario") ON DELETE SET NULL ON UPDATE CASCADE;
 
